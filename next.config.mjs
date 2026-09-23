@@ -5,7 +5,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   serverExternalPackages: ['node:sqlite', 'ws', 'diff', 'fast-glob'],
   typescript: {
     ignoreBuildErrors: true,
