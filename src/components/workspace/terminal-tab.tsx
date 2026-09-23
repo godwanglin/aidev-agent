@@ -81,6 +81,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
       const isLight = document.documentElement.classList.contains('light');
       const term = new XTerm({
         cursorBlink: true,
+        convertEol: true,
         fontFamily: '"Fira Code", monospace',
         fontSize: 12.5,
         lineHeight: 1.25,

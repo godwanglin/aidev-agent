@@ -16,8 +16,9 @@ let nodePty = null;
 try {
   const ptyModule = await import('node-pty');
   nodePty = ptyModule.default || ptyModule;
+  console.log('[Terminal] Native node-pty backend loaded successfully.');
 } catch {
-  // node-pty not available, will use child_process fallback
+  console.log('[Terminal] node-pty not available, falling back to standard child_process.spawn');
 }
 
 const rawEnv = (process.env.NODE_ENV || '').trim().toLowerCase();
@@ -237,7 +238,7 @@ function setupTerminalWebSocket(wss) {
     } else {
       // Fallback: child_process.spawn with process-tree SIGINT / taskkill
       const fallbackShell = isWindows ? process.env.COMSPEC || 'cmd.exe' : process.env.SHELL || '/bin/bash';
-      const fallbackArgs = isWindows ? ['/Q'] : ['-i'];
+      const fallbackArgs = isWindows ? ['/Q'] : ['--noediting', '-i'];
 
       let child;
       try {
@@ -258,13 +259,13 @@ function setupTerminalWebSocket(wss) {
 
       let isExited = false;
 
-      // Nudge Linux shell to output initial prompt in pipe mode
+      // Nudge Linux shell to output initial prompt in pipe mode only if buffer empty
       if (!isWindows) {
         setTimeout(() => {
-          if (!isExited && child.stdin && !child.stdin.destroyed) {
+          if (!isExited && (!termSession.buffer || termSession.buffer.length === 0) && child.stdin && !child.stdin.destroyed) {
             child.stdin.write('\n');
           }
-        }, 150);
+        }, 300);
       }
 
       termSession = {
@@ -329,12 +330,13 @@ function setupTerminalWebSocket(wss) {
       };
 
       const sendOutput = (data) => {
-        termSession.buffer += data;
+        const cleanData = data.replace(/\r?\n/g, '\r\n');
+        termSession.buffer += cleanData;
         if (termSession.buffer.length > 60000) {
           termSession.buffer = termSession.buffer.slice(-50000);
         }
         if (termSession.ws && termSession.ws.readyState === WebSocket.OPEN) {
-          termSession.ws.send(JSON.stringify({ type: 'output', data }));
+          termSession.ws.send(JSON.stringify({ type: 'output', data: cleanData }));
         }
       };
 

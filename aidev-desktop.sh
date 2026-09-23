@@ -49,8 +49,8 @@ if [ ! -d "node_modules" ]; then
   echo -e "\n${BLUE}📦 Folder node_modules belum ada. Menginstall dependencies (npm install)...${NC}"
   npm install
   echo -e "${GREEN}✅ Dependencies berhasil diinstall!${NC}"
-elif [ ! -d "node_modules/node-pty" ]; then
-  echo -e "\n${BLUE}📦 Menginstall node-pty untuk PTY terminal native di Linux...${NC}"
+elif [ ! -d "node_modules/node-pty" ] || ! node -e "require('node-pty')" >/dev/null 2>&1; then
+  echo -e "\n${BLUE}📦 Menginstall / memverifikasi node-pty untuk PTY terminal native di Linux...${NC}"
   npm install node-pty
   echo -e "${GREEN}✅ node-pty berhasil terpasang!${NC}"
 fi
