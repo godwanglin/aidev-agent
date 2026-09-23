@@ -1,6 +1,6 @@
 {
   "name": "aidev-coding-agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aidev Desktop Coding Agent",
   "author": "Aidev Team <support@aidev.com>",
   "private": true,
@@ -19,9 +19,9 @@
     "pack:npm": "node scripts/pack-npm.mjs",
     "electron:dev": "npm run build:electron && electron .",
     "dist": "npm run build && npm run build:electron && electron-builder",
-    "dist:win": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win",
+    "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "dist:linux": "npm run build && npm run build:electron && electron-builder --linux",
-    "dist:dir": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win --dir",
+    "dist:dir": "npm run build && npm run build:electron && electron-builder --win --dir",
     "tunnel": "..\\cloudflared.exe tunnel --url http://localhost:3001",
     "test": "npx tsx tests/test-aidev.mjs",
     "test:tools": "npx tsx tests/test-worldclass-tools.mjs",
@@ -62,17 +62,13 @@
       "icon": "build/icon.png",
       "extraFiles": [
         {
-          "from": "build/resources/aidev.cmd",
+          "from": "electron/shims/aidev.cmd",
           "to": "aidev.cmd"
         }
       ],
       "extraResources": [
         {
-          "from": "build/resources/npm",
-          "to": "npm"
-        },
-        {
-          "from": "build/resources/aidev.cmd",
+          "from": "electron/shims/aidev.cmd",
           "to": "bin/aidev.cmd"
         }
       ]

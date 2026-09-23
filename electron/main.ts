@@ -125,9 +125,36 @@ async function startBackendServer(port: number): Promise<void> {
 
   console.log(`Starting backend server on port ${port} using: ${serverPath}`);
 
-  const bundledNpmBin = path.join(process.resourcesPath, 'npm', 'bin');
-  const customPath = fs.existsSync(bundledNpmBin)
-    ? `${bundledNpmBin}${path.delimiter}${process.env.PATH || ''}`
+  const extraPaths: string[] = [];
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+
+  // 1. Cached aidev-runtimes (Node & Git)
+  const cachedNodeDir = path.join(homeDir, '.cache', 'aidev-runtimes', 'node');
+  if (fs.existsSync(cachedNodeDir)) {
+    extraPaths.push(cachedNodeDir);
+    if (fs.existsSync(path.join(cachedNodeDir, 'bin'))) {
+      extraPaths.push(path.join(cachedNodeDir, 'bin'));
+    }
+  }
+  const cachedGitCmd = path.join(homeDir, '.cache', 'aidev-runtimes', 'git', 'cmd');
+  if (fs.existsSync(cachedGitCmd)) {
+    extraPaths.push(cachedGitCmd);
+  }
+
+  // 2. Standard system Node/NPM locations on Windows
+  if (process.platform === 'win32') {
+    const winNode = 'C:\\Program Files\\nodejs';
+    if (fs.existsSync(winNode)) {
+      extraPaths.push(winNode);
+    }
+    const winNpm = path.join(homeDir, 'AppData', 'Roaming', 'npm');
+    if (fs.existsSync(winNpm)) {
+      extraPaths.push(winNpm);
+    }
+  }
+
+  const customPath = extraPaths.length > 0
+    ? `${extraPaths.join(path.delimiter)}${path.delimiter}${process.env.PATH || ''}`
     : process.env.PATH;
 
   const childEnv: Record<string, string | undefined> = { ...process.env };

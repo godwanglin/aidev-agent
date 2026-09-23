@@ -1,7 +1,4 @@
 !macro customInstall
-  DetailPrint "Configuring Aidev NPM runtime..."
-  nsExec::Exec 'cmd.exe /c mklink /J "$INSTDIR\resources\npm\node_modules" "$INSTDIR\resources\npm\vendor"'
-
   DetailPrint "Registering Aidev CLI to PATH..."
   ReadRegStr $0 HKCU "Environment" "Path"
   StrCmp $0 "" empty_path
@@ -20,9 +17,6 @@ end_path:
 !macroend
 
 !macro customUnInstall
-  DetailPrint "Cleaning Aidev NPM runtime link..."
-  nsExec::Exec 'cmd.exe /c rmdir "$INSTDIR\resources\npm\node_modules"'
-
   DetailPrint "Removing aidev:// protocol handler..."
   DeleteRegKey HKCR "aidev"
 

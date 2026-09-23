@@ -53,9 +53,6 @@ jobs:
       - name: Compile Electron Main Process
         run: npm run build:electron
 
-      - name: Pack NPM Runtime
-        run: npm run pack:npm
-
       - name: Clean Next.js internal build folders
         run: rm -rf .next/node_modules .next/types .next/diagnostics
 

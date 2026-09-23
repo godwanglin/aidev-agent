@@ -115,20 +115,31 @@ export async function executeRunCommand(
 
     const extraPaths: string[] = [];
     let extraNodePath = '';
-    if ((process as any).resourcesPath) {
-      const bundledNpmBin = path.join((process as any).resourcesPath, 'npm', 'bin');
-      if (fs.existsSync(bundledNpmBin)) {
-        extraPaths.push(bundledNpmBin);
-      }
-      const bundledNpmVendor = path.join((process as any).resourcesPath, 'npm', 'vendor');
-      if (fs.existsSync(bundledNpmVendor)) {
-        extraNodePath = bundledNpmVendor;
+    const userHome = process.env.USERPROFILE || process.env.HOME || '';
+
+    // 1. Cached aidev-runtimes (Node & Git)
+    const cachedNodeDir = path.join(userHome, '.cache', 'aidev-runtimes', 'node');
+    if (fs.existsSync(cachedNodeDir)) {
+      extraPaths.push(cachedNodeDir);
+      if (fs.existsSync(path.join(cachedNodeDir, 'bin'))) {
+        extraPaths.push(path.join(cachedNodeDir, 'bin'));
       }
     }
-    const userHome = process.env.USERPROFILE || process.env.HOME || '';
     const cachedGitCmd = path.join(userHome, '.cache', 'aidev-runtimes', 'git', 'cmd');
     if (fs.existsSync(cachedGitCmd)) {
       extraPaths.push(cachedGitCmd);
+    }
+
+    // 2. Standard system Node/NPM locations on Windows if not already in PATH
+    if (process.platform === 'win32') {
+      const winStandardNode = 'C:\\Program Files\\nodejs';
+      if (fs.existsSync(winStandardNode)) {
+        extraPaths.push(winStandardNode);
+      }
+      const winAppDataNpm = path.join(userHome, 'AppData', 'Roaming', 'npm');
+      if (fs.existsSync(winAppDataNpm)) {
+        extraPaths.push(winAppDataNpm);
+      }
     }
 
     const mergedPath = extraPaths.length > 0
