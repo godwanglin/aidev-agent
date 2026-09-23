@@ -46,6 +46,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
   const fitAddonRef = useRef<any>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const themeObserverRef = useRef<MutationObserver | null>(null);
+  const hasReceivedDataRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -125,6 +126,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
         terminalId
       )}&workdir=${encodeURIComponent(workdir)}`;
 
+      hasReceivedDataRef.current = false;
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
@@ -140,9 +142,17 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
             }
           } catch {}
         }, 50);
+
+        // If shell prompt is quiet or not yet displayed after 700ms, nudge shell with a newline
+        setTimeout(() => {
+          if (socket.readyState === WebSocket.OPEN && !hasReceivedDataRef.current) {
+            socket.send(JSON.stringify({ type: 'input', data: '\r\n' }));
+          }
+        }, 700);
       };
 
       socket.onmessage = (event) => {
+        hasReceivedDataRef.current = true;
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'output' && msg.data) {
@@ -183,10 +193,12 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
         return true;
       });
 
-      // User input forwarded to child process
+      // User input forwarded to child process, or auto-reconnect if dropped
       term.onData((data: string) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: 'input', data }));
+        } else {
+          connectTerminal();
         }
       });
 
@@ -237,7 +249,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
   }, [terminalId, workdir]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] dark:bg-[#121315] overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] dark:bg-[#121315] overflow-hidden relative">
       {errorMsg && (
         <div className="p-2 bg-red-500/10 border-b border-red-500/20 text-red-300 text-xs flex items-center gap-2 font-sans">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
@@ -245,10 +257,33 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({ terminalId, workdir })
         </div>
       )}
 
+      {/* Disconnected recovery overlay badge */}
+      {!isConnected && (
+        <div className="absolute top-2 right-4 z-20 flex items-center gap-2 bg-[#18191e]/90 backdrop-blur-xs border border-[#2d2e38] px-2.5 py-1 rounded-md text-[11px] text-[#9da3ae] shadow-lg select-none">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span>Terputus</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              connectTerminal();
+            }}
+            className="px-2 py-0.5 bg-[#00d2ff]/20 text-[#00d2ff] hover:bg-[#00d2ff]/30 rounded text-[11px] font-medium transition cursor-pointer"
+          >
+            Hubungkan Ulang
+          </button>
+        </div>
+      )}
+
       {/* xterm DOM Container */}
       <div
         ref={containerRef}
-        onClick={() => xtermRef.current?.focus()}
+        onClick={() => {
+          xtermRef.current?.focus();
+          if (!isConnected) {
+            connectTerminal();
+          }
+        }}
         className="flex-1 w-full h-full p-2 overflow-hidden bg-transparent cursor-text"
       />
     </div>
