@@ -18,20 +18,37 @@ jobs:
   build-windows:
     name: Build Windows Installer
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install dependencies
         run: npm install --include=dev
 
       - name: Build Next.js Web Bundle
-        run: npm run build
+        run: |
+          npm run build > build.log 2>&1 || true
+          echo "=== [WINDOWS NEXT.JS BUILD LOG] ==="
+          cat build.log
+          if [ ! -f ".next/BUILD_ID" ]; then
+            echo "Error: Next.js build failed to produce .next/BUILD_ID"
+            exit 1
+          fi
+
+      - name: Upload Windows Next Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-next-build-log
+          path: build.log
 
       - name: Compile Electron Main Process
         run: npm run build:electron
@@ -54,15 +71,6 @@ jobs:
             release/latest.yml
           if-no-files-found: warn
 
-      - name: Upload Failure Logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-failure-logs
-          path: |
-            *.log
-            release/*.log
-
   build-linux:
     name: Build Linux Packages (AppImage, deb, tar.gz)
     runs-on: ubuntu-latest
@@ -70,10 +78,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install Linux build dependencies
         run: |
@@ -84,7 +92,21 @@ jobs:
         run: npm install --include=dev
 
       - name: Build Next.js Web Bundle
-        run: npm run build
+        run: |
+          npm run build > build.log 2>&1 || true
+          echo "=== [LINUX NEXT.JS BUILD LOG] ==="
+          cat build.log
+          if [ ! -f ".next/BUILD_ID" ]; then
+            echo "Error: Next.js build failed to produce .next/BUILD_ID"
+            exit 1
+          fi
+
+      - name: Upload Linux Next Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-next-build-log
+          path: build.log
 
       - name: Compile Electron Main Process
         run: npm run build:electron
@@ -116,15 +138,6 @@ jobs:
             release/*.blockmap
             release/latest-linux.yml
           if-no-files-found: warn
-
-      - name: Upload Failure Logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-failure-logs
-          path: |
-            *.log
-            release/*.log
 
   publish-release:
     name: Publish GitHub Release
