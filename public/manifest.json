@@ -1,0 +1,16 @@
+{
+  "name": "Aidev Desktop Coding Agent",
+  "short_name": "Aidev Agent",
+  "description": "Ultra-lightweight autonomous desktop pair-programming agent",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d13",
+  "theme_color": "#161b22",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

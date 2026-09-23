@@ -1,0 +1,117 @@
+{
+  "name": "aidev-coding-agent",
+  "version": "1.0.0",
+  "description": "Aidev Desktop Coding Agent",
+  "author": "Aidev Team",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "next build",
+    "start": "NODE_ENV=production node server.mjs",
+    "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
+    "pack:npm": "node scripts/pack-npm.mjs",
+    "electron:dev": "npm run build:electron && electron .",
+    "dist": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win nsis",
+    "dist:dir": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win --dir",
+    "tunnel": "..\\cloudflared.exe tunnel --url http://localhost:3001",
+    "test": "npx tsx tests/test-aidev.mjs",
+    "test:tools": "npx tsx tests/test-worldclass-tools.mjs",
+    "test:all": "npx tsx tests/test-aidev.mjs && npx tsx tests/test-worldclass-tools.mjs"
+  },
+  "build": {
+    "appId": "com.aidev.desktop",
+    "productName": "Aidev Desktop",
+    "executableName": "Aidev",
+    "asar": false,
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "server.mjs",
+      ".next/**/*",
+      "!.next/cache/**/*",
+      "!.next/dev/**/*",
+      "!.next/standalone/**/*",
+      "public/**/*",
+      "!**/*.map"
+    ],
+    "extraFiles": [
+      {
+        "from": "build/resources/aidev.cmd",
+        "to": "aidev.cmd"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "build/resources/npm",
+        "to": "npm"
+      },
+      {
+        "from": "build/resources/aidev.cmd",
+        "to": "bin/aidev.cmd"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "artifactName": "Aidev-Setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aidev Desktop",
+      "uninstallDisplayName": "Aidev Desktop Coding Agent",
+      "include": "build/installer.nsh"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@react-symbols/icons": "^1.4.1",
+    "@types/prismjs": "^1.26.5",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "diff": "^7.0.0",
+    "fast-glob": "^3.3.3",
+    "lucide-react": "^1.39.0",
+    "next": "16.3.4",
+    "node-pty": "^1.1.0",
+    "openai": "^4.85.0",
+    "prismjs": "^1.30.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "^9.0.3",
+    "remark-gfm": "^4.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.5.14",
+    "autoprefixer": "^10.4.20",
+    "electron": "^44.4.4",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.3"
+  }
+}

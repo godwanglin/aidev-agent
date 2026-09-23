@@ -1,0 +1,1367 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import '@xterm/xterm/css/xterm.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #101010;
+  --foreground: #cccccc;
+  --primary: #007acc;
+  --primary-foreground: #ffffff;
+  --error: #de5555;
+  --warning: #e8975f;
+  --link: #58a6ff;
+  --success: #7ee787;
+  --code-foreground: #d7ba7d;
+  --secondary: #272727;
+  --secondary-foreground: #9d9d9d;
+  --muted: #151515;
+  --muted-foreground: #8c8c8c;
+  --placeholder: #666666;
+  --border: #191919;
+  --card: #181818;
+  --card-border: #262626;
+  --sidebar: #151515;
+  --sidebar-secondary: #1b1b1b;
+  --sidebar-muted: #151515;
+}
+
+html, body {
+  height: 100%;
+  height: 100svh;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+}
+
+/* Fira Code HD Programming Ligatures for all code & terminal elements */
+code, pre, .font-mono, .xterm {
+  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace !important;
+  font-feature-settings: 'calt' 1, 'liga' 1;
+  font-variant-ligatures: contextual;
+  font-weight: 450;
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  -moz-osx-font-smoothing: auto !important;
+  text-rendering: geometricPrecision !important;
+}
+
+/* Sleek Ultra-Thin Minimal Scrollbar (4px) */
+::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 150, 0.3) !important;
+  border-radius: 9999px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 140, 155, 0.6) !important;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(100, 100, 110, 0.25) !important;
+  border-radius: 9999px !important;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(70, 70, 80, 0.5) !important;
+}
+
+/* Visually hidden scrollbars, while remaining fully scrollable (e.g. tabs bar) */
+.scrollbar-none::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.scrollbar-none,
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+/* Antigravity Smooth Animation Keyframes */
+@keyframes dropdownEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-dropdown {
+  animation: dropdownEnter 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.22s ease-out forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sheetSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheetSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheetSlideDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.animate-sheet-down {
+  animation: sheetSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modalEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Smooth Accordion Expand/Collapse Animation (Pure CSS 60fps Grid Transition) */
+.accordion-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.accordion-grid.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@keyframes expandDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-expand {
+  animation: expandDown 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Antigravity Floating Input Dock */
+.soft-dock {
+  background: #181818;
+  border: 1px solid #262626;
+  box-shadow: 0 16px 40px -4px rgba(0, 0, 0, 0.7);
+}
+
+/* Antigravity Surface Card */
+.soft-card {
+  background: #181818;
+  border: 1px solid #262626;
+}
+
+.soft-card:hover {
+  border-color: #333333;
+}
+
+/* ==========================================================================
+   Cursor / Vesper Dark Editor Theme (1:1 with media_1789881971319.png)
+   ========================================================================== */
+
+/* Base Code & Pre Elements */
+code[class*="language-"],
+pre[class*="language-"],
+pre code {
+  color: #eceff4;
+  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace !important;
+  font-feature-settings: 'calt' 1, 'liga' 1;
+  font-variant-ligatures: contextual;
+  font-weight: 450;
+  font-size: 13.5px !important;
+  line-height: 22px !important;
+  tab-size: 2;
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  -moz-osx-font-smoothing: auto !important;
+  text-rendering: geometricPrecision !important;
+}
+
+/* Comments: Soft Slate Blue / Charcoal Gray (italic) */
+.token.comment,
+.token.block-comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #5c6370 !important;
+  font-style: italic;
+}
+
+/* Punctuation & Braces */
+.token.punctuation {
+  color: #a1a1aa !important;
+}
+
+/* Operators & Logic */
+.token.operator,
+.token.entity,
+.token.url {
+  color: #d4d4d8 !important;
+}
+
+/* Keywords: Electric Vivid Cyan (const, return, if, else, export, import, from, default, function, async, await, new) */
+.token.keyword,
+.token.atrule,
+.token.builtin {
+  color: #00d2ff !important;
+  font-weight: 500;
+}
+
+/* Functions & Method Invocations: Warm Glowing Gold / Canary Yellow (preventDefault, getData, execCommand, readAsDataURL) */
+.token.function,
+.token.function-name {
+  color: #ffd166 !important;
+}
+
+/* Strings, Template Literals & Characters: Fresh Lime Green ('image', 'text/plain', 'insertText') */
+.token.string,
+.token.char,
+.token.attr-value {
+  color: #a6e22e !important;
+}
+
+/* Template Literals */
+.token.template-string .token.string {
+  color: #a6e22e !important;
+}
+.token.template-punctuation {
+  color: #00d2ff !important;
+}
+
+/* HTML / JSX Tags: Coral Pink / Crimson Red (<div, <span, <button) */
+.token.tag {
+  color: #f92672 !important;
+}
+.token.tag .token.punctuation {
+  color: #f92672 !important;
+}
+
+/* HTML / JSX Attributes: Fresh Lime Green (className, onClick, type, href) */
+.token.attr-name {
+  color: #a6e22e !important;
+}
+
+/* Variables, Properties & Object Keys: Crisp Off-White (id, url, name, mimeType, imgId, newImage, file) */
+.token.property,
+.token.variable,
+.token.constant {
+  color: #eceff4 !important;
+}
+
+/* Types, Classes & Interfaces: Crisp Off-White / Cyan (AttachedImage) */
+.token.class-name {
+  color: #eceff4 !important;
+  font-weight: 500;
+}
+
+/* Booleans & Expressions: Coral Red / Pink (false, true, isCentered) */
+.token.boolean {
+  color: #ff5370 !important;
+}
+
+/* Numbers: Gold / Amber */
+.token.number {
+  color: #ffd166 !important;
+}
+
+/* JSON & Structured Code Syntax Highlighting (matching user screenshot) */
+.language-json .token.property {
+  color: #ff7b72 !important; /* Vivid Coral / Pink for keys ("function", "pageId", "waitForStableDom") */
+  font-weight: 500;
+}
+.language-json .token.string {
+  color: #a6e22e !important; /* Fresh Glowing Lime Green / Yellow for strings */
+}
+.language-json .token.number {
+  color: #79c0ff !important; /* Electric Blue / Sky for numbers (2, 42, 100) */
+}
+.language-json .token.boolean {
+  color: #d2a8ff !important; /* Soft Lavender / Purple for booleans (false, true) */
+}
+.language-json .token.null {
+  color: #ff7b72 !important;
+}
+.language-json .token.punctuation {
+  color: #e4e4e7 !important; /* Crisp Light Gray for {, }, [, ], :, , */
+}
+.language-json .token.operator {
+  color: #a1a1aa !important;
+}
+
+/* Regex & Selector */
+.token.regex {
+  color: #e5c07b !important;
+}
+.token.selector {
+  color: #00d2ff !important;
+}
+
+/* Inserted / Deleted (Diff Viewer) */
+.token.inserted {
+  color: #a6e22e !important;
+  background: rgba(166, 226, 46, 0.1) !important;
+}
+.token.deleted {
+  color: #f92672 !important;
+  background: rgba(249, 38, 114, 0.1) !important;
+}
+
+/* Markdown tokens */
+.token.title,
+.token.title.important {
+  color: #00d2ff !important;
+  font-weight: 600;
+}
+.token.bold {
+  font-weight: 700;
+  color: #ffffff !important;
+}
+.token.italic {
+  font-style: italic;
+  color: #cbd5e1 !important;
+}
+.token.list.punctuation,
+.token.list {
+  color: #ffd166 !important;
+  font-weight: 600;
+}
+.token.blockquote.punctuation,
+.token.blockquote {
+  color: #38bdf8 !important;
+}
+.token.code {
+  color: #a6e22e !important;
+}
+
+/* xterm.js container styling */
+.xterm {
+  padding: 10px 14px;
+  font-family: 'Fira Code', monospace !important;
+  font-variant-ligatures: contextual;
+}
+html.dark .xterm-viewport {
+  background-color: #121315 !important;
+}
+html.light .xterm-viewport {
+  background-color: #f8fafc !important;
+}
+
+/* Google Stitch / Gemini Ambient Rotating Border Effect (Soft Non-Full Sweeping Beam) */
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes rotate-border-angle {
+  0% {
+    --border-angle: 275deg;
+  }
+  11.4% {
+    --border-angle: 320deg;
+  }
+  22.8% {
+    --border-angle: 360deg;
+  }
+  34.2% {
+    --border-angle: 400deg;
+  }
+  45.7% {
+    --border-angle: 445deg;
+  }
+  47.8% {
+    --border-angle: 450deg;
+  }
+  50% {
+    --border-angle: 455deg;
+  }
+  61.4% {
+    --border-angle: 500deg;
+  }
+  72.8% {
+    --border-angle: 540deg;
+  }
+  84.2% {
+    --border-angle: 580deg;
+  }
+  95.7% {
+    --border-angle: 625deg;
+  }
+  97.8% {
+    --border-angle: 630deg;
+  }
+  100% {
+    --border-angle: 635deg;
+  }
+}
+
+@keyframes ambient-breathe {
+  0%, 100% {
+    opacity: 0.32;
+    filter: blur(10px);
+  }
+  50% {
+    opacity: 0.48;
+    filter: blur(14px);
+  }
+}
+
+/* Ambient Outer Glow (Active when AI is working / streaming) */
+.ambient-border-glow {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 25.5px;
+  background: conic-gradient(
+    from var(--border-angle),
+    rgba(56, 189, 248, 0.55) 0deg,
+    rgba(45, 212, 191, 0.38) 20deg,
+    transparent 45deg,
+    transparent 315deg,
+    rgba(168, 85, 247, 0.38) 340deg,
+    rgba(56, 189, 248, 0.55) 360deg
+  );
+  animation: rotate-border-angle 7s linear infinite, ambient-breathe 4.5s ease-in-out infinite;
+  filter: blur(13px);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+/* Ambient Card Border (Active when AI is working / streaming) */
+.ambient-border-active {
+  border: 1px solid transparent !important;
+  background: 
+    linear-gradient(#18181b, #18181b) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      rgba(56, 189, 248, 0.75) 0deg,
+      rgba(45, 212, 191, 0.55) 18deg,
+      rgba(45, 212, 191, 0.18) 35deg,
+      rgba(255, 255, 255, 0.08) 50deg,
+      rgba(255, 255, 255, 0.08) 310deg,
+      rgba(168, 85, 247, 0.18) 325deg,
+      rgba(192, 132, 252, 0.55) 342deg,
+      rgba(56, 189, 248, 0.75) 360deg
+    ) border-box !important;
+  animation: rotate-border-angle 7s linear infinite !important;
+  box-shadow: 0 12px 36px -6px rgba(0, 0, 0, 0.75);
+}
+
+/* Glass Outer Glow (Focus glow version, always active and rotating around dock) */
+.glass-border-glow {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 25.5px;
+  background: conic-gradient(
+    from var(--border-angle),
+    rgba(255, 255, 255, 0.42) 0deg,
+    rgba(255, 255, 255, 0.22) 14deg,
+    rgba(215, 235, 255, 0.08) 28deg,
+    transparent 42deg,
+    transparent 318deg,
+    rgba(215, 235, 255, 0.08) 332deg,
+    rgba(255, 255, 255, 0.22) 346deg,
+    rgba(255, 255, 255, 0.42) 360deg
+  );
+  animation: rotate-border-angle 7s linear infinite;
+  filter: blur(12px);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Glass Card Border (Always active, clean solid interior, sleek rotating border) */
+.glass-border-active,
+.dock-glass-container {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(#18181b, #18181b) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      rgba(255, 255, 255, 0.65) 0deg,
+      rgba(255, 255, 255, 0.35) 12deg,
+      rgba(215, 235, 255, 0.16) 24deg,
+      rgba(255, 255, 255, 0.08) 38deg,
+      rgba(255, 255, 255, 0.08) 322deg,
+      rgba(215, 235, 255, 0.16) 336deg,
+      rgba(255, 255, 255, 0.35) 348deg,
+      rgba(255, 255, 255, 0.65) 360deg
+    ) border-box !important;
+  animation: rotate-border-angle 7s linear infinite !important;
+  box-shadow: 0 12px 36px -6px rgba(0, 0, 0, 0.75);
+}
+
+/* Usage Card Border Glow (Sleek rotating light along the 1px border, matching chat input) */
+.usage-card-border-active {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(#161619, #161619) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      rgba(255, 255, 255, 0.75) 0deg,
+      rgba(255, 255, 255, 0.4) 12deg,
+      rgba(215, 235, 255, 0.18) 24deg,
+      rgba(255, 255, 255, 0.08) 38deg,
+      rgba(255, 255, 255, 0.08) 322deg,
+      rgba(215, 235, 255, 0.18) 336deg,
+      rgba(255, 255, 255, 0.4) 348deg,
+      rgba(255, 255, 255, 0.75) 360deg
+    ) border-box !important;
+  animation: rotate-border-angle 7s linear infinite !important;
+  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.85);
+}
+
+html.light .usage-card-border-active {
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      rgba(0, 0, 0, 0.5) 0deg,
+      rgba(0, 0, 0, 0.25) 12deg,
+      rgba(0, 0, 0, 0.1) 24deg,
+      rgba(0, 0, 0, 0.04) 38deg,
+      rgba(0, 0, 0, 0.04) 322deg,
+      rgba(0, 0, 0, 0.1) 336deg,
+      rgba(0, 0, 0, 0.25) 348deg,
+      rgba(0, 0, 0, 0.5) 360deg
+    ) border-box !important;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 1.85rem 0;
+}
+
+/* =========================================================
+   LIGHT THEME OVERRIDES (Controlled by html.light)
+   Maps dark surfaces, panels, borders, and text to active preset
+   ========================================================= */
+html.light body,
+html.light .bg-\[\#101010\],
+html.light .bg-\[\#121214\],
+html.light .bg-\[\#121315\],
+html.light .bg-\[\#141414\],
+html.light .bg-\[\#151515\],
+html.light .bg-\[\#161616\],
+html.light .bg-\[\#07080a\],
+html.light .bg-\[\#0a0a0a\],
+html.light .bg-\[\#0b0c0f\],
+html.light .bg-\[\#0d0d0d\],
+html.light .bg-\[\#0d0d0f\],
+html.light .bg-\[\#0d0f14\],
+html.light .bg-\[\#0e0e11\],
+html.light .bg-\[\#0e1015\],
+html.light .bg-\[\#0f0f0f\],
+html.light .bg-\[\#101012\],
+html.light .bg-\[\#121212\],
+html.light .bg-\[\#121215\],
+html.light .bg-\[\#121316\],
+html.light .bg-\[\#131315\],
+html.light .bg-\[\#13161e\],
+html.light .bg-\[\#161618\],
+html.light .bg-\[\#161619\],
+html.light .bg-\[\#16161c\],
+html.light .bg-\[\#16171b\],
+html.light .bg-\[\#16171d\],
+html.light .bg-\[\#161a24\],
+html.light .bg-\[\#161c2c\],
+html.light .bg-\[\#162544\],
+html.light .bg-\[\#17171a\] {
+  background-color: var(--background, #f9f9f9) !important;
+}
+
+html.light .bg-\[\#181818\],
+html.light .bg-\[\#18181a\],
+html.light .bg-\[\#18181b\],
+html.light .bg-\[\#18181c\],
+html.light .bg-\[\#18181f\],
+html.light .bg-\[\#1a1a1a\],
+html.light .bg-\[\#1a1a1d\],
+html.light .bg-\[\#1a1a1e\],
+html.light .bg-\[\#1a1a22\],
+html.light .bg-\[\#1a1c20\],
+html.light .bg-\[\#1a1e2a\],
+html.light .bg-\[\#1a2332\],
+html.light .bg-\[\#1b1b1e\],
+html.light .bg-\[\#1b1b20\],
+html.light .bg-\[\#1b1c20\],
+html.light .bg-\[\#1c1c1c\],
+html.light .bg-\[\#1c1c1f\],
+html.light .bg-\[\#1d1d24\],
+html.light .bg-\[\#1d1e24\],
+html.light .bg-\[\#141416\],
+html.light .bg-\[\#141417\],
+html.light .bg-\[\#141418\],
+html.light .bg-\[\#14151a\],
+html.light .bg-\[\#151518\],
+html.light .bg-\[\#191919\],
+html.light .bg-\[\#1f1f1f\],
+html.light .bg-\[\#1f1f22\],
+html.light .bg-\[\#1f1f23\],
+html.light .bg-\[\#222222\],
+html.light .bg-\[\#232326\],
+html.light .bg-\[\#2a2a2a\],
+html.light .bg-\[\#1e1e1e\],
+html.light .bg-\[\#1e1e22\],
+html.light .bg-\[\#1e1e24\] {
+  background-color: var(--card, #ffffff) !important;
+}
+
+html.light .bg-\[\#202020\],
+html.light .bg-\[\#202022\],
+html.light .bg-\[\#202024\],
+html.light .bg-\[\#202026\],
+html.light .bg-\[\#21262d\],
+html.light .bg-\[\#222226\],
+html.light .bg-\[\#222227\],
+html.light .bg-\[\#222228\],
+html.light .bg-\[\#22283a\],
+html.light .bg-\[\#232328\],
+html.light .bg-\[\#23232b\],
+html.light .bg-\[\#23232c\],
+html.light .bg-\[\#242424\],
+html.light .bg-\[\#252525\],
+html.light .bg-\[\#252529\],
+html.light .bg-\[\#25252a\],
+html.light .bg-\[\#252630\],
+html.light .bg-\[\#262626\],
+html.light .bg-\[\#26262f\],
+html.light .bg-\[\#262732\],
+html.light .bg-\[\#27272a\],
+html.light .bg-\[\#27272c\],
+html.light .bg-\[\#272730\],
+html.light .bg-\[\#282828\],
+html.light .bg-\[\#28282c\],
+html.light .bg-\[\#28282d\],
+html.light .bg-\[\#28282e\],
+html.light .bg-\[\#282830\],
+html.light .bg-\[\#2a2a2e\],
+html.light .bg-\[\#2a2a30\],
+html.light .bg-\[\#2b2c37\],
+html.light .bg-\[\#2c2c32\],
+html.light .bg-\[\#2d2d2d\],
+html.light .bg-\[\#2e2e2e\],
+html.light .bg-\[\#30363d\],
+html.light .bg-\[\#323232\],
+html.light .bg-\[\#32323e\],
+html.light .bg-\[\#333333\],
+html.light .bg-\[\#333338\],
+html.light .bg-\[\#3a3a3a\] {
+  background-color: var(--secondary, #ececef) !important;
+}
+
+/* Resizer Split Handles (Strict hairline 1px divider, transparent hitbox) */
+.w-\[1px\].cursor-col-resize {
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 100% !important;
+  transition: background-color 150ms ease;
+}
+
+.h-\[1px\].cursor-row-resize {
+  height: 1px !important;
+  min-height: 1px !important;
+  width: 100% !important;
+  transition: background-color 150ms ease;
+}
+
+html.dark .w-\[1px\].cursor-col-resize,
+html.dark .h-\[1px\].cursor-row-resize {
+  background-color: var(--border, #222226);
+}
+
+html.light .w-\[1px\].cursor-col-resize,
+html.light .h-\[1px\].cursor-row-resize {
+  background-color: var(--border, #e2e2e6) !important;
+}
+
+html.dark .w-\[1px\].cursor-col-resize:hover,
+html.dark .h-\[1px\].cursor-row-resize:hover,
+html.light .w-\[1px\].cursor-col-resize:hover,
+html.light .h-\[1px\].cursor-row-resize:hover {
+  background-color: #007acc !important;
+}
+
+/* Resizer invisible hitboxes (MUST ALWAYS BE TRANSPARENT) */
+.cursor-col-resize > div,
+.cursor-row-resize > div,
+div.cursor-col-resize.z-20,
+div.cursor-row-resize.z-20,
+.cursor-col-resize.z-20,
+.cursor-row-resize.z-20,
+[class*="-left-1.5"][class*="-right-1.5"],
+[class*="-top-1.5"][class*="-bottom-1.5"] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+html.light .bg-white\/30 {
+  background-color: #007acc !important;
+}
+
+/* Markdown inline code pills in Light Mode */
+html.light .bg-\[\#1d1d24\],
+html.light code.bg-\[\#1d1d24\] {
+  background-color: #f1f3f5 !important;
+  color: #1e293b !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Clarification & Question Cards in Light Mode */
+html.light .text-slate-200 {
+  color: #1e293b !important;
+}
+html.light .accordion-inner .text-\[\#ffffff\],
+html.light .accordion-inner [class*="text-\[\#ffffff\]"],
+html.light .accordion-inner [class*="isChosen"] {
+  color: #0f172a !important;
+}
+
+/* Floating scroll-to-bottom button */
+html.light .bg-\[\#181818\]\/80 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #d0d7de !important;
+  color: #57606a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+html.light .bg-\[\#181818\]\/80:hover {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+/* Hover surfaces */
+html.light .hover\:bg-\[\#131315\]:hover,
+html.light .hover\:bg-\[\#151515\]:hover,
+html.light .hover\:bg-\[\#181818\]:hover,
+html.light .hover\:bg-\[\#18181b\]:hover,
+html.light .hover\:bg-\[\#18181c\]:hover,
+html.light .hover\:bg-\[\#191919\]:hover,
+html.light .hover\:bg-\[\#1a1a1a\]:hover,
+html.light .hover\:bg-\[\#1a1a1d\]:hover,
+html.light .hover\:bg-\[\#1a1a1e\]:hover,
+html.light .hover\:bg-\[\#1a1a22\]:hover,
+html.light .hover\:bg-\[\#1a1c20\]:hover,
+html.light .hover\:bg-\[\#1b1b1e\]:hover,
+html.light .hover\:bg-\[\#1b1b20\]:hover,
+html.light .hover\:bg-\[\#1c1c1c\]:hover,
+html.light .hover\:bg-\[\#1e1e22\]:hover,
+html.light .hover\:bg-\[\#1e1e24\]:hover,
+html.light .hover\:bg-\[\#1f1f1f\]:hover,
+html.light .hover\:bg-\[\#1f1f22\]:hover,
+html.light .hover\:bg-\[\#202020\]:hover,
+html.light .hover\:bg-\[\#202022\]:hover,
+html.light .hover\:bg-\[\#202024\]:hover,
+html.light .hover\:bg-\[\#222222\]:hover,
+html.light .hover\:bg-\[\#222226\]:hover,
+html.light .hover\:bg-\[\#222227\]:hover,
+html.light .hover\:bg-\[\#22283a\]:hover,
+html.light .hover\:bg-\[\#232326\]:hover,
+html.light .hover\:bg-\[\#232328\]:hover,
+html.light .hover\:bg-\[\#23232b\]:hover,
+html.light .hover\:bg-\[\#23232c\]:hover,
+html.light .hover\:bg-\[\#252525\]:hover,
+html.light .hover\:bg-\[\#252529\]:hover,
+html.light .hover\:bg-\[\#252630\]:hover,
+html.light .hover\:bg-\[\#262626\]:hover,
+html.light .hover\:bg-\[\#27272a\]:hover,
+html.light .hover\:bg-\[\#27272c\]:hover,
+html.light .hover\:bg-\[\#272730\]:hover,
+html.light .hover\:bg-\[\#282828\]:hover,
+html.light .hover\:bg-\[\#28282c\]:hover,
+html.light .hover\:bg-\[\#28282e\]:hover,
+html.light .hover\:bg-\[\#282830\]:hover,
+html.light .hover\:bg-\[\#2a2a2e\]:hover,
+html.light .hover\:bg-\[\#2c2c2c\]:hover,
+html.light .hover\:bg-\[\#2c2c32\]:hover,
+html.light .hover\:bg-\[\#30363d\]:hover,
+html.light .hover\:bg-\[\#32323e\]:hover,
+html.light .hover\:bg-\[\#333338\]:hover,
+html.light .hover\:bg-\[\#3a3a3a\]:hover,
+html.light .hover\:bg-white\/\[0\.08\]:hover,
+html.light .hover\:bg-white\/\[0\.05\]:hover,
+html.light .hover\:bg-white\/\[0\.04\]:hover,
+html.light .hover\:bg-white\/\[0\.03\]:hover,
+html.light .hover\:bg-white\/\[0\.02\]:hover,
+html.light .hover\:bg-white\/10:hover,
+html.light .hover\:bg-white\/15:hover,
+html.light .hover\:bg-\[\#181818\]\/60:hover,
+html.light .hover\:bg-\[\#1f1f1f\]\/50:hover {
+  background-color: #e8e8ed !important;
+}
+
+/* Borders */
+html.light .border-\[\#191919\],
+html.light .border-\[\#1c1c1c\],
+html.light .border-\[\#1c1c1f\],
+html.light .border-\[\#1e1e1e\],
+html.light .border-\[\#1e1e22\],
+html.light .border-\[\#1e2024\],
+html.light .border-\[\#1f1f1f\],
+html.light .border-\[\#202020\],
+html.light .border-\[\#202022\],
+html.light .border-\[\#202024\],
+html.light .border-\[\#222222\],
+html.light .border-\[\#222226\],
+html.light .border-\[\#222227\],
+html.light .border-\[\#222228\],
+html.light .border-\[\#232328\],
+html.light .border-\[\#23232c\],
+html.light .border-\[\#242424\],
+html.light .border-\[\#242426\],
+html.light .border-\[\#242428\],
+html.light .border-\[\#24242c\],
+html.light .border-\[\#262626\],
+html.light .border-\[\#26262a\],
+html.light .border-\[\#26262b\],
+html.light .border-\[\#26262c\],
+html.light .border-\[\#26262d\],
+html.light .border-\[\#272730\],
+html.light .border-\[\#282828\],
+html.light .border-\[\#28282e\],
+html.light .border-\[\#2a2a2a\],
+html.light .border-\[\#2a2a2e\],
+html.light .border-\[\#2a2a30\],
+html.light .border-\[\#2a2a32\],
+html.light .border-\[\#2b2b2b\],
+html.light .border-\[\#2b2b30\],
+html.light .border-\[\#2b2b32\],
+html.light .border-\[\#2b2b33\],
+html.light .border-\[\#2c2c36\],
+html.light .border-\[\#2c2d33\],
+html.light .border-\[\#2d2d2d\],
+html.light .border-\[\#2d2d34\],
+html.light .border-\[\#2d2d38\],
+html.light .border-\[\#2e2e2e\],
+html.light .border-\[\#2e2e32\],
+html.light .border-\[\#2e2e33\],
+html.light .border-\[\#2e2e34\],
+html.light .border-\[\#2e2e35\],
+html.light .border-\[\#2e2e38\],
+html.light .border-\[\#2f2f36\],
+html.light .border-\[\#303038\],
+html.light .border-\[\#30363d\],
+html.light .border-\[\#323340\],
+html.light .border-\[\#333333\],
+html.light .border-\[\#333338\],
+html.light .border-\[\#333340\],
+html.light .border-\[\#35353c\],
+html.light .border-\[\#363640\],
+html.light .border-\[\#363644\],
+html.light .border-\[\#383838\],
+html.light .border-\[\#38383e\],
+html.light .border-\[\#383842\],
+html.light .border-\[\#3a3a3a\],
+html.light .border-\[\#3a3a40\],
+html.light .border-\[\#3b3b48\],
+html.light .border-\[\#3c3e50\],
+html.light .border-\[\#3d3d3d\],
+html.light .border-\[\#424456\],
+html.light .border-\[\#444444\],
+html.light .border-\[\#48485c\],
+html.light .border-\[\#4d4d62\],
+html.light .border-\[\#525264\],
+html.light .border-white\/\[0\.08\],
+html.light .border-white\/\[0\.07\],
+html.light .border-white\/\[0\.06\],
+html.light .border-white\/\[0\.05\],
+html.light .border-white\/\[0\.1\] {
+  border-color: var(--border, #e2e2e6) !important;
+}
+
+/* Hover Borders */
+html.light .hover\:border-\[\#2a2a2a\]:hover,
+html.light .hover\:border-\[\#2b2b30\]:hover,
+html.light .hover\:border-\[\#2d2d2d\]:hover,
+html.light .hover\:border-\[\#2f2f36\]:hover,
+html.light .hover\:border-\[\#333333\]:hover,
+html.light .hover\:border-\[\#333340\]:hover,
+html.light .hover\:border-\[\#363640\]:hover,
+html.light .hover\:border-\[\#383838\]:hover,
+html.light .hover\:border-\[\#3d3d3d\]:hover,
+html.light .hover\:border-\[\#424456\]:hover,
+html.light .hover\:border-\[\#48485c\]:hover,
+html.light .hover\:border-\[\#4d4d62\]:hover,
+html.light .hover\:border-\[\#666666\]:hover {
+  border-color: #cbd5e1 !important;
+}
+
+/* Input Dock in Light Mode (fixes Gambar 2: black pill when focused or streaming) */
+html.light .dock-glass-container,
+html.light .glass-border-active,
+html.light .ambient-border-active {
+  background: #ffffff !important;
+  border: 1px solid var(--border, #e2e2e6) !important;
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .dock-glass-container:focus-within,
+html.light .glass-border-active {
+  border: 1px solid #007acc !important;
+  background: #ffffff !important;
+  box-shadow: 0 6px 28px -2px rgba(0, 122, 204, 0.18) !important;
+}
+
+html.light .ambient-border-active {
+  border: 1px solid #007acc !important;
+  background: #ffffff !important;
+  box-shadow: 0 6px 28px -2px rgba(0, 122, 204, 0.22) !important;
+}
+
+/* Dropdown Menus in Light Mode (fixes Gambar 1: unreadable white text on hover) */
+html.light .animate-dropdown,
+html.light [role="menu"] {
+  background-color: #ffffff !important;
+  border-color: var(--border, #e2e2e6) !important;
+  box-shadow: 0 10px 38px -10px rgba(0, 0, 0, 0.15), 0 10px 20px -15px rgba(0, 0, 0, 0.1) !important;
+}
+
+html.light .animate-dropdown button,
+html.light [role="menu"] button {
+  color: #1e293b !important;
+}
+
+html.light .animate-dropdown button:hover,
+html.light [role="menu"] button:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light .animate-dropdown button:hover svg,
+html.light [role="menu"] button:hover svg {
+  color: #0f172a !important;
+}
+
+html.light .animate-dropdown .hover\:text-\[\#dededf\]:hover,
+html.light .animate-dropdown .hover\:text-white:hover,
+html.light [role="menu"] .hover\:text-\[\#dededf\]:hover,
+html.light [role="menu"] .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* Dark Mode Presets Dynamic Surface Mapping (Enables OLED Black, Tokyo Night, Dracula, etc.) */
+html.dark body,
+html.dark .bg-\[\#101010\],
+html.dark .bg-\[\#0a0a0a\],
+html.dark .bg-\[\#07080a\],
+html.dark .bg-\[\#0d0d0d\],
+html.dark .bg-\[\#0d0d0f\],
+html.dark .bg-\[\#0e1015\] {
+  background-color: var(--background) !important;
+}
+
+html.dark aside,
+html.dark .bg-\[\#151515\],
+html.dark .bg-\[\#141414\],
+html.dark .bg-\[\#131315\],
+html.dark .bg-\[\#121214\] {
+  background-color: var(--sidebar) !important;
+}
+
+html.dark .bg-\[\#181818\],
+html.dark .bg-\[\#18181a\],
+html.dark .bg-\[\#18181b\],
+html.dark .bg-\[\#18181c\],
+html.dark .bg-\[\#1a1a1a\],
+html.dark .bg-\[\#1c1c1c\],
+html.dark .bg-\[\#1c1c1f\],
+html.dark .bg-\[\#1e1e1e\],
+html.dark .bg-\[\#1f1f1f\] {
+  background-color: var(--card) !important;
+}
+
+/* Chat Input Dock Submit Button */
+html.light button.rounded-full.bg-\[\#2a2a2e\] {
+  background-color: #007acc !important;
+  color: #ffffff !important;
+}
+html.light button.rounded-full.bg-\[\#2a2a2e\]:hover {
+  background-color: #0062a3 !important;
+  color: #ffffff !important;
+}
+
+
+/* Divides */
+html.light .divide-\[\#1e1e20\] > :not([hidden]) ~ :not([hidden]),
+html.light .divide-\[\#1e1e22\] > :not([hidden]) ~ :not([hidden]),
+html.light .divide-\[\#202024\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border, #e2e2e6) !important;
+}
+
+/* Foreground / Primary Text */
+html.light,
+html.light body,
+html.light .text-\[\#cccccc\],
+html.light .text-\[\#dededf\],
+html.light .text-\[\#dedede\],
+html.light .text-\[\#f5f5f7\],
+html.light .text-\[\#f0f0f2\],
+html.light .text-\[\#f0f6fc\],
+html.light .text-\[\#f1f5f9\],
+html.light .text-\[\#e2e8f0\],
+html.light .text-\[\#e0e0e0\],
+html.light .text-\[\#e0e0e4\],
+html.light .text-\[\#e1e1e1\],
+html.light .text-\[\#e4e4e7\],
+html.light .text-\[\#e6edf3\],
+html.light .text-\[\#eaeaea\],
+html.light .text-\[\#eceff4\],
+html.light .text-\[\#f4f4f5\],
+html.light .text-\[\#f0f0f0\],
+html.light .text-\[\#d4d4d4\],
+html.light .text-\[\#d4d4d8\],
+html.light .text-\[\#dcdce4\],
+html.light .text-\[\#dcdce5\],
+html.light .text-\[\#d0d0d5\],
+html.light .text-\[\#d0d4dc\],
+html.light .text-\[\#c9d1d9\],
+html.light .text-\[\#cbd5e1\],
+html.light .text-\[\#c4c4c8\],
+html.light .text-\[\#c2c2c6\],
+html.light .text-\[\#b3b3b3\],
+html.light .text-zinc-100,
+html.light .text-zinc-200,
+html.light .text-zinc-300,
+html.light .text-white {
+  color: var(--foreground, #151515) !important;
+}
+
+/* Secondary / Muted Text */
+html.light .text-\[\#868686\],
+html.light .text-\[\#8c8c8c\],
+html.light .text-\[\#8c8c92\],
+html.light .text-\[\#8c8c96\],
+html.light .text-\[\#8e8e98\],
+html.light .text-\[\#888888\],
+html.light .text-\[\#888892\],
+html.light .text-\[\#80808b\],
+html.light .text-\[\#8a8a92\],
+html.light .text-\[\#7e7e85\],
+html.light .text-\[\#777777\],
+html.light .text-\[\#777782\],
+html.light .text-\[\#768390\],
+html.light .text-\[\#737373\],
+html.light .text-\[\#71717a\],
+html.light .text-\[\#707076\],
+html.light .text-\[\#6e6e6e\],
+html.light .text-\[\#6e6e76\],
+html.light .text-\[\#6b6b72\],
+html.light .text-\[\#666666\],
+html.light .text-\[\#66666e\],
+html.light .text-\[\#666672\],
+html.light .text-\[\#5e5e65\],
+html.light .text-\[\#555555\],
+html.light .text-\[\#555560\],
+html.light .text-\[\#484848\],
+html.light .text-\[\#949494\],
+html.light .text-\[\#94a3b8\],
+html.light .text-\[\#98989e\],
+html.light .text-\[\#999999\],
+html.light .text-\[\#9c9ca4\],
+html.light .text-\[\#9d9d9d\],
+html.light .text-\[\#a0a0a0\],
+html.light .text-\[\#a0a0ab\],
+html.light .text-\[\#a1a1aa\],
+html.light .text-\[\#a5a5ab\],
+html.light .text-\[\#a3a3a3\],
+html.light .text-\[\#aaaaaa\],
+html.light .text-\[\#4d5158\],
+html.light .text-zinc-400 {
+  color: #5a5a62 !important;
+}
+
+/* Aesthetic Tooltip in Light Mode */
+html.light .aesthetic-tooltip {
+  background-color: #ffffff !important;
+  border-color: #d0d7de !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+}
+html.light .aesthetic-tooltip span {
+  color: #1f2328 !important;
+}
+html.light .aesthetic-tooltip span:last-child {
+  color: #656d76 !important;
+}
+
+/* Diff Viewer in Light Mode */
+html.light .bg-\[\#132e18\]\/80,
+html.light .bg-\[\#132e18\] {
+  background-color: #e6ffec !important;
+}
+html.light .hover\:bg-\[\#16381d\]:hover {
+  background-color: #dafbe1 !important;
+}
+html.light .bg-\[\#3e1616\]\/80,
+html.light .bg-\[\#3e1616\] {
+  background-color: #ffebe9 !important;
+}
+html.light .hover\:bg-\[\#4a1a1a\]:hover {
+  background-color: #ffdce0 !important;
+}
+html.light .bg-\[\#0f1013\] {
+  background-color: #f6f8fa !important;
+}
+
+/* Diff Viewer Fold Bar in Light Mode */
+html.light .group\/fold .bg-\[\#222222\],
+html.light [class*="fold"] .bg-\[\#222222\] {
+  background-color: var(--border, #e2e2e6) !important;
+}
+
+/* Markdown Inline Code & Code Blocks */
+html.light code:not(pre code) {
+  background-color: #eff1f3 !important;
+  color: #b45309 !important;
+  border: 1px solid #d0d7de !important;
+}
+html.light pre {
+  background-color: #f6f8fa !important;
+  border-color: #d0d7de !important;
+  color: #1f2328 !important;
+}
+
+/* Prism Code Tokens in Light Mode */
+html.light .token.property,
+html.light .token.variable,
+html.light .token.constant {
+  color: #0550ae !important;
+}
+html.light .token.class-name {
+  color: #953800 !important;
+}
+html.light .token.keyword,
+html.light .token.atrule {
+  color: #cf222e !important;
+}
+html.light .token.function,
+html.light .token.function-name {
+  color: #8250df !important;
+}
+html.light .token.string,
+html.light .token.char,
+html.light .token.attr-value {
+  color: #0a3069 !important;
+}
+html.light .token.punctuation,
+html.light .token.operator {
+  color: #24292f !important;
+}
+html.light .token.boolean,
+html.light .token.number {
+  color: #0550ae !important;
+}
+html.light .token.comment {
+  color: #6e7781 !important;
+}
+html.light .token.tag {
+  color: #116329 !important;
+}
+html.light .token.attr-name {
+  color: #0550ae !important;
+}
+html.light .token.inserted {
+  color: #1a7f37 !important;
+  background: rgba(46, 160, 67, 0.15) !important;
+}
+html.light .token.deleted {
+  color: #cf222e !important;
+  background: rgba(255, 129, 130, 0.15) !important;
+}
+
+/* Light Mode JSON tokens */
+html.light .language-json .token.property {
+  color: #cf222e !important;
+  font-weight: 500;
+}
+html.light .language-json .token.string {
+  color: #116329 !important;
+}
+html.light .language-json .token.number {
+  color: #0550ae !important;
+}
+html.light .language-json .token.boolean {
+  color: #8250df !important;
+}
+html.light .language-json .token.punctuation {
+  color: #24292f !important;
+}
+
+html.light aside {
+  background-color: var(--sidebar, #f3f3f5) !important;
+  border-color: var(--border, #e2e2e6) !important;
+}
+
+html.light hr {
+  border-top-color: var(--border, #e2e2e6) !important;
+}
+
+/* Slash Chips in Light Mode */
+html.light .bg-\[\#2a1d13\] {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+html.light .bg-\[\#231a30\] {
+  background-color: #f3e8ff !important;
+  border-color: #e9d5ff !important;
+  color: #7e22ce !important;
+}
+html.light .bg-\[\#122838\] {
+  background-color: #e0f2fe !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+}
+html.light .bg-\[\#132a24\] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+/* Floating Selection Quote Button */
+html.light .selection-quote-btn,
+html.light [title*="Insert this quote into chat input"] {
+  background-color: rgba(255, 255, 255, 0.98) !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .selection-quote-btn:hover,
+html.light [title*="Insert this quote into chat input"]:hover {
+  background-color: #f8fafc !important;
+  color: #020617 !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light .selection-quote-btn kbd,
+html.light [title*="Insert this quote into chat input"] kbd {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Clarification Card and Questions in Light Mode */
+html.light .clarification-card,
+html.light [data-card="clarification"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}

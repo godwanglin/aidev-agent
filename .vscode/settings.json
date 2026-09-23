@@ -1,0 +1,13 @@
+{
+  "files.watcherExclude": {
+    "**/release/**": true,
+    "**/.next/**": true,
+    "**/node_modules/**": true,
+    "**/build/resources/**": true
+  },
+  "search.exclude": {
+    "**/release": true,
+    "**/.next": true,
+    "**/node_modules": true
+  }
+}
