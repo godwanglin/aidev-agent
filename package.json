@@ -44,6 +44,9 @@
       "!.next/cache/**/*",
       "!.next/dev/**/*",
       "!.next/standalone/**/*",
+      "!.next/node_modules/**/*",
+      "!.next/types/**/*",
+      "!.next/diagnostics/**/*",
       "public/**/*",
       "!**/*.map"
     ],
