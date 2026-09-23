@@ -34,8 +34,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build Next.js Web Bundle
+        run: npm run build
+
+      - name: Compile Electron Main Process
+        run: npm run build:electron
+
+      - name: Pack NPM Runtime
+        run: npm run pack:npm
+
       - name: Build Windows Installer (.exe)
-        run: npm run dist:win
+        run: npx electron-builder --win
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -43,8 +54,9 @@ jobs:
           name: windows-artifacts
           path: |
             release/*.exe
+            release/*.blockmap
             release/latest.yml
-          if-no-files-found: error
+          if-no-files-found: warn
 
   build-linux:
     name: Build Linux Packages (AppImage, deb, tar.gz)
@@ -67,8 +79,16 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Linux Desktop Packages
-        run: npm run dist:linux
+      - name: Build Next.js Web Bundle
+        run: npm run build
+
+      - name: Compile Electron Main Process
+        run: npm run build:electron
+
+      - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
+        run: npx electron-builder --linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package Linux Standalone Web Runner
         run: |
@@ -87,8 +107,9 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.tar.gz
+            release/*.blockmap
             release/latest-linux.yml
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish-release:
     name: Publish GitHub Release

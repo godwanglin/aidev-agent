@@ -5,6 +5,10 @@
   "author": "Aidev Team",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/godwanglin/aidev-agent.git"
+  },
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "node server.mjs",
@@ -14,9 +18,9 @@
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
     "pack:npm": "node scripts/pack-npm.mjs",
     "electron:dev": "npm run build:electron && electron .",
-    "dist": "npm run build && npm run build:electron && npm run pack:npm && electron-builder",
-    "dist:win": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win nsis",
-    "dist:linux": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --linux AppImage deb tar.gz",
+    "dist": "npm run build && npm run build:electron && electron-builder",
+    "dist:win": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win",
+    "dist:linux": "npm run build && npm run build:electron && electron-builder --linux",
     "dist:dir": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win --dir",
     "tunnel": "..\\cloudflared.exe tunnel --url http://localhost:3001",
     "test": "npx tsx tests/test-aidev.mjs",
@@ -43,12 +47,6 @@
       "public/**/*",
       "!**/*.map"
     ],
-    "extraResources": [
-      {
-        "from": "build/resources/npm",
-        "to": "npm"
-      }
-    ],
     "win": {
       "target": [
         {
@@ -66,6 +64,10 @@
         }
       ],
       "extraResources": [
+        {
+          "from": "build/resources/npm",
+          "to": "npm"
+        },
         {
           "from": "build/resources/aidev.cmd",
           "to": "bin/aidev.cmd"
