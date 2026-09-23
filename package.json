@@ -10,6 +10,7 @@
     "dev": "node server.mjs",
     "build": "next build",
     "start": "NODE_ENV=production node server.mjs",
+    "linux": "bash aidev-desktop.sh",
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
     "pack:npm": "node scripts/pack-npm.mjs",
     "electron:dev": "npm run build:electron && electron .",

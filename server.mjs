@@ -3,7 +3,7 @@ import { parse } from 'url';
 import next from 'next';
 import net from 'net';
 import { WebSocketServer, WebSocket } from 'ws';
-import { spawn } from 'child_process';
+import { spawn, execSync, spawnSync } from 'child_process';
 import url, { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 
@@ -398,7 +398,31 @@ function launchDesktopApp(url) {
   } else if (isMac) {
     spawn('open', ['-na', 'Google Chrome', '--args', `--app=${url}`], { detached: true, stdio: 'ignore' });
   } else {
-    spawn('google-chrome', [`--app=${url}`], { detached: true, stdio: 'ignore' });
+    // Linux: try launching standalone window via Chromium/Chrome/Brave/Edge or fallback to default browser
+    const candidates = [
+      'google-chrome',
+      'google-chrome-stable',
+      'chromium',
+      'chromium-browser',
+      'brave-browser',
+      'microsoft-edge',
+    ];
+    let launched = false;
+    for (const browserCmd of candidates) {
+      try {
+        const check = spawnSync('which', [browserCmd], { stdio: 'ignore' });
+        if (check.status === 0) {
+          spawn(browserCmd, [`--app=${url}`], { detached: true, stdio: 'ignore' });
+          launched = true;
+          break;
+        }
+      } catch {}
+    }
+    if (!launched) {
+      try {
+        spawn('xdg-open', [url], { detached: true, stdio: 'ignore' });
+      } catch {}
+    }
   }
 }
 
