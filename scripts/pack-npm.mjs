@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 function copyRecursiveSync(src, dest) {
   const exists = fs.existsSync(src);
@@ -26,12 +27,38 @@ async function main() {
   const candidateNpmPaths = [
     path.join(projectRoot, 'node_modules', 'npm'),
     path.join(path.dirname(process.execPath), 'node_modules', 'npm'),
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm'),
+    '/usr/lib/node_modules/npm',
+    '/usr/local/lib/node_modules/npm',
     'C:\\Program Files\\nodejs\\node_modules\\npm',
   ];
+
+  try {
+    const globalRoot = execSync('npm root -g', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (globalRoot) {
+      candidateNpmPaths.unshift(path.join(globalRoot, 'npm'));
+    }
+  } catch {}
+
+  const resDir = path.join(projectRoot, 'build', 'resources');
+  fs.mkdirSync(resDir, { recursive: true });
+
+  const shimSrcDir = path.join(projectRoot, 'electron', 'shims');
+  const cliDest = path.join(resDir, 'aidev.cmd');
+  if (fs.existsSync(path.join(shimSrcDir, 'aidev.cmd'))) {
+    fs.copyFileSync(path.join(shimSrcDir, 'aidev.cmd'), cliDest);
+    console.log('Installed aidev.cmd CLI wrapper.');
+  }
 
   let sourceNpmPath = candidateNpmPaths.find((p) => fs.existsSync(p));
 
   if (!sourceNpmPath) {
+    if (process.platform === 'linux') {
+      console.warn('System npm directory not found on Linux runner, creating placeholder for extraResources.');
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.writeFileSync(path.join(targetDir, '.keep'), '');
+      return;
+    }
     console.error('Could not find system npm source directory.');
     process.exit(1);
   }
@@ -69,12 +96,7 @@ async function main() {
     console.log('Installed custom electron npx.cmd shim.');
   }
 
-  // Copy aidev.cmd to build/resources/aidev.cmd
-  const cliDest = path.join(projectRoot, 'build', 'resources', 'aidev.cmd');
-  if (fs.existsSync(path.join(shimSrcDir, 'aidev.cmd'))) {
-    fs.copyFileSync(path.join(shimSrcDir, 'aidev.cmd'), cliDest);
-    console.log('Installed aidev.cmd CLI wrapper.');
-  }
+
 
   console.log('✅ Super-Slim NPM/NPX Runtime successfully packed!');
 }

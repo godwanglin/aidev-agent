@@ -3,5 +3,5 @@ node_modules/
 dist/
 release/
 dist-electron/
-build/
+build/resources/
 *.log

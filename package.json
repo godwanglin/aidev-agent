@@ -14,7 +14,9 @@
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
     "pack:npm": "node scripts/pack-npm.mjs",
     "electron:dev": "npm run build:electron && electron .",
-    "dist": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win nsis",
+    "dist": "npm run build && npm run build:electron && npm run pack:npm && electron-builder",
+    "dist:win": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win nsis",
+    "dist:linux": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --linux AppImage deb tar.gz",
     "dist:dir": "npm run build && npm run build:electron && npm run pack:npm && electron-builder --win --dir",
     "tunnel": "..\\cloudflared.exe tunnel --url http://localhost:3001",
     "test": "npx tsx tests/test-aidev.mjs",
@@ -41,20 +43,10 @@
       "public/**/*",
       "!**/*.map"
     ],
-    "extraFiles": [
-      {
-        "from": "build/resources/aidev.cmd",
-        "to": "aidev.cmd"
-      }
-    ],
     "extraResources": [
       {
         "from": "build/resources/npm",
         "to": "npm"
-      },
-      {
-        "from": "build/resources/aidev.cmd",
-        "to": "bin/aidev.cmd"
       }
     ],
     "win": {
@@ -66,7 +58,29 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "extraFiles": [
+        {
+          "from": "build/resources/aidev.cmd",
+          "to": "aidev.cmd"
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "build/resources/aidev.cmd",
+          "to": "bin/aidev.cmd"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "artifactName": "Aidev-${version}-${arch}.${ext}"
     },
     "nsis": {
       "artifactName": "Aidev-Setup.${ext}",
