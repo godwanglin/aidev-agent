@@ -29,13 +29,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --include=dev
 
       - name: Build Next.js Web Bundle
-        run: npm run build
+        run: |
+          npm run build 2>&1 | tee next-build.log || {
+            echo "### ❌ Next.js Build Failed on Windows" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            cat next-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
       - name: Compile Electron Main Process
         run: npm run build:electron
@@ -69,7 +75,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Linux build dependencies
         run: |
@@ -77,10 +82,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends libarchive-tools desktop-file-utils || true
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --include=dev
 
       - name: Build Next.js Web Bundle
-        run: npm run build
+        run: |
+          npm run build 2>&1 | tee next-build.log || {
+            echo "### ❌ Next.js Build Failed on Linux" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            cat next-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
       - name: Compile Electron Main Process
         run: npm run build:electron

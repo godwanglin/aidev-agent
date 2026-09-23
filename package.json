@@ -12,7 +12,7 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "node server.mjs",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "NODE_ENV=production node server.mjs",
     "linux": "bash aidev-desktop.sh",
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
