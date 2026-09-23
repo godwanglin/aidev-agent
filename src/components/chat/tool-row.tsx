@@ -647,7 +647,7 @@ export const ToolRow: React.FC<ToolRowProps> = ({
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{
-                                a({ href, children }) {
+                                a({ href, children }: any) {
                                   return (
                                     <a
                                       href={href}
@@ -681,19 +681,19 @@ export const ToolRow: React.FC<ToolRowProps> = ({
                                     </pre>
                                   );
                                 },
-                                h1({ children }) {
+                                h1({ children }: any) {
                                   return <h1 className="text-sm font-semibold text-white mt-2 mb-1">{children}</h1>;
                                 },
-                                h2({ children }) {
+                                h2({ children }: any) {
                                   return <h2 className="text-xs font-semibold text-white mt-2 mb-1">{children}</h2>;
                                 },
-                                ul({ children }) {
+                                ul({ children }: any) {
                                   return <ul className="list-disc pl-4 space-y-0.5 my-1 text-[#cccccc] text-[12px]">{children}</ul>;
                                 },
-                                ol({ children }) {
+                                ol({ children }: any) {
                                   return <ol className="list-decimal pl-4 space-y-0.5 my-1 text-[#cccccc] text-[12px]">{children}</ol>;
                                 },
-                                p({ children }) {
+                                p({ children }: any) {
                                   return <p className="mb-1.5 last:mb-0 text-[#cccccc] text-[12.5px]">{children}</p>;
                                 },
                               }}

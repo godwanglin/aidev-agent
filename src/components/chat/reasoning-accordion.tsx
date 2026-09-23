@@ -57,16 +57,16 @@ export const ReasoningAccordion: React.FC<ReasoningAccordionProps> = ({
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                p({ children }) {
+                p({ children }: any) {
                   return <p className="mb-2 last:mb-0 leading-relaxed text-[#9d9d9d]">{children}</p>;
                 },
-                ul({ children }) {
+                ul({ children }: any) {
                   return <ul className="list-disc list-outside ml-4 mb-2 space-y-1 text-[#9d9d9d]">{children}</ul>;
                 },
-                ol({ children }) {
+                ol({ children }: any) {
                   return <ol className="list-decimal list-outside ml-4 mb-2 space-y-1 text-[#9d9d9d]">{children}</ol>;
                 },
-                li({ children }) {
+                li({ children }: any) {
                   return <li className="leading-relaxed">{children}</li>;
                 },
                 code({ inline, className, children, ...props }: any) {
@@ -79,17 +79,17 @@ export const ReasoningAccordion: React.FC<ReasoningAccordionProps> = ({
                     </code>
                   );
                 },
-                pre({ children }) {
+                pre({ children }: any) {
                   return (
                     <pre className="p-2.5 my-2 rounded-lg bg-white/[0.03] border border-white/[0.06] overflow-x-auto text-[11.5px] font-mono text-[#d4d4d4]">
                       {children}
                     </pre>
                   );
                 },
-                strong({ children }) {
+                strong({ children }: any) {
                   return <strong className="font-semibold text-[#cccccc]">{children}</strong>;
                 },
-                em({ children }) {
+                em({ children }: any) {
                   return <em className="italic text-[#a8a8a8]">{children}</em>;
                 },
               }}

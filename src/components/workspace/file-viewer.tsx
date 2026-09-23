@@ -119,27 +119,27 @@ const MarkdownPreview: React.FC<{
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            h1: ({ children }) => (
+            h1: ({ children }: any) => (
               <h1 className="text-2xl md:text-3xl font-bold text-white mt-10 mb-6 pb-3 border-b border-white/[0.07]">
                 {children}
               </h1>
             ),
-            h2: ({ children }) => (
+            h2: ({ children }: any) => (
               <h2 className="text-xl md:text-2xl font-semibold text-white mt-9 mb-5 pb-2.5 border-b border-white/[0.05]">
                 {children}
               </h2>
             ),
-            h3: ({ children }) => (
+            h3: ({ children }: any) => (
               <h3 className="text-base md:text-lg font-semibold text-[#f1f5f9] mt-7 mb-3.5">
                 {children}
               </h3>
             ),
-            h4: ({ children }) => (
+            h4: ({ children }: any) => (
               <h4 className="text-sm md:text-base font-semibold text-[#e2e8f0] mt-6 mb-3">
                 {children}
               </h4>
             ),
-            p: ({ children }) => (
+            p: ({ children }: any) => (
               <p className="mb-5 text-[#d0d4dc] leading-[1.8] text-[13.5px] last:mb-0">
                 {children}
               </p>
@@ -204,45 +204,45 @@ const MarkdownPreview: React.FC<{
                 </li>
               );
             },
-            blockquote: ({ children }) => (
+            blockquote: ({ children }: any) => (
               <blockquote className="border-l-3 border-[#38bdf8] bg-[#14151a] px-5 py-4 rounded-r-xl my-6 text-[#cbd5e1] italic text-[13.5px] leading-[1.8] shadow-xs space-y-3">
                 {children}
               </blockquote>
             ),
-            table: ({ children }) => (
+            table: ({ children }: any) => (
               <div className="my-7 overflow-x-auto rounded-xl border border-white/[0.08] bg-[#141418] shadow-sm">
                 <table className="w-full text-[13px] text-[#d0d4dc] border-collapse">
                   {children}
                 </table>
               </div>
             ),
-            thead: ({ children }) => (
+            thead: ({ children }: any) => (
               <thead className="bg-[#18181c] text-[#94a3b8] font-semibold border-b border-white/[0.08]">
                 {children}
               </thead>
             ),
-            th: ({ children }) => (
+            th: ({ children }: any) => (
               <th className="px-4 py-2.5 text-left font-semibold text-[#94a3b8] border-b border-white/[0.08]">
                 {children}
               </th>
             ),
-            tbody: ({ children }) => (
+            tbody: ({ children }: any) => (
               <tbody className="divide-y divide-white/[0.04]">
                 {children}
               </tbody>
             ),
-            tr: ({ children }) => (
+            tr: ({ children }: any) => (
               <tr className="hover:bg-white/[0.02] transition-colors">
                 {children}
               </tr>
             ),
-            td: ({ children }) => (
+            td: ({ children }: any) => (
               <td className="px-4 py-2.5 border-b border-white/[0.04] align-middle">
                 {children}
               </td>
             ),
             hr: () => <hr className="my-8 border-t border-white/[0.07]" />,
-            a: ({ href, children }) => (
+            a: ({ href, children }: any) => (
               <a
                 href={href}
                 target="_blank"
@@ -275,7 +275,7 @@ const MarkdownPreview: React.FC<{
                 />
               );
             },
-            img: ({ src, alt }) => {
+            img: ({ src, alt }: any) => {
               if (!src) return null;
               return (
                 <div className="my-6 rounded-xl overflow-hidden border border-[#272730] bg-[#121316] max-w-2xl shadow-md">
@@ -315,10 +315,10 @@ const MarkdownPreview: React.FC<{
               }
               return <input type={type} />;
             },
-            strong: ({ children }) => (
+            strong: ({ children }: any) => (
               <strong className="font-semibold text-white">{children}</strong>
             ),
-            em: ({ children }) => (
+            em: ({ children }: any) => (
               <em className="italic text-[#e2e8f0]">{children}</em>
             ),
           }}

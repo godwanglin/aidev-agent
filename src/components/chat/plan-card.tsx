@@ -83,22 +83,22 @@ export const PlanCard: React.FC<PlanCardProps> = ({
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              h1: ({ children }) => (
+              h1: ({ children }: any) => (
                 <h1 className="text-[14px] font-semibold text-[#f0f0f0] mb-2 pb-1 border-b border-[#262626]">
                   {children}
                 </h1>
               ),
-              h2: ({ children }) => (
+              h2: ({ children }: any) => (
                 <h2 className="text-[13px] font-medium text-[#e4e4e7] mt-3 mb-1.5">
                   {children}
                 </h2>
               ),
-              h3: ({ children }) => (
+              h3: ({ children }: any) => (
                 <h3 className="text-[12px] font-medium text-[#d4d4d8] mt-2 mb-1">
                   {children}
                 </h3>
               ),
-              p: ({ children }) => (
+              p: ({ children }: any) => (
                 <p className="text-[12px] text-[#cccccc] leading-relaxed mb-2 last:mb-0">
                   {children}
                 </p>
