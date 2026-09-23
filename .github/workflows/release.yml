@@ -57,7 +57,7 @@ jobs:
         run: npm run pack:npm
 
       - name: Clean Next.js internal build folders
-        run: Remove-Item -Recurse -Force .next\node_modules, .next\types, .next\diagnostics -ErrorAction SilentlyContinue
+        run: rm -rf .next/node_modules .next/types .next/diagnostics
 
       - name: Build Windows Installer (.exe)
         run: npx electron-builder --win --publish never
