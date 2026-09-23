@@ -25,31 +25,18 @@ echo "=========================================================="
 echo -e "${NC}"
 
 # ------------------------------------------------------------------------------
-# 1. Check & Auto-Install Node.js & npm if missing
+# 1. Check Node.js & npm (Asumsi user sudah pasang dev tools)
 # ------------------------------------------------------------------------------
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  echo -e "${YELLOW}⚠️  Node.js / npm belum terpasang di sistem Linux ini.${NC}"
-  echo -e "${BLUE}ℹ️  Mencoba menginstall Node.js secara otomatis...${NC}"
+if ! command -v node >/dev/null 2>&1; then
+  echo -e "${RED}❌ Error: 'node' tidak ditemukan.${NC}"
+  echo -e "   Pastikan Node.js (v20+) sudah terpasang atau aktifkan nvm/fnm kamu."
+  exit 1
+fi
 
-  if command -v apt-get >/dev/null 2>&1; then
-    echo -e "${GREEN}   Terdeteksi distro Debian/Ubuntu/Mint. Menjalankan apt...${NC}"
-    sudo apt-get update
-    sudo apt-get install -y curl
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-  elif command -v dnf >/dev/null 2>&1; then
-    echo -e "${GREEN}   Terdeteksi distro Fedora/RHEL. Menjalankan dnf...${NC}"
-    sudo dnf install -y nodejs npm
-  elif command -v pacman >/dev/null 2>&1; then
-    echo -e "${GREEN}   Terdeteksi distro Arch Linux. Menjalankan pacman...${NC}"
-    sudo pacman -Sy --noconfirm nodejs npm
-  elif command -v zypper >/dev/null 2>&1; then
-    echo -e "${GREEN}   Terdeteksi distro openSUSE. Menjalankan zypper...${NC}"
-    sudo zypper install -y nodejs npm
-  else
-    echo -e "${RED}❌ Gagal mendeteksi package manager. Silakan install Node.js (v20+) secara manual: https://nodejs.org${NC}"
-    exit 1
-  fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo -e "${RED}❌ Error: 'npm' tidak ditemukan.${NC}"
+  echo -e "   Pastikan npm sudah terpasang di environment kamu."
+  exit 1
 fi
 
 NODE_VER=$(node -v)
@@ -77,13 +64,17 @@ fi
 # 4. Set Environment & Launch
 # ------------------------------------------------------------------------------
 export APP_MODE=true
-export NODE_ENV=production
 
-echo -e "\n${GREEN}${BOLD}=========================================================="
-echo "   ⚡ Menjalankan Aidev Agent..."
-echo "   🌐 Browser akan otomatis terbuka dalam mode desktop window."
-echo "   Tekan Ctrl + C di terminal ini untuk berhenti."
-echo -e "==========================================================${NC}\n"
-
-# Run server.mjs directly
-node server.mjs
+if [ "$1" = "--dev" ]; then
+  echo -e "\n${YELLOW}${BOLD}⚡ Menjalankan dalam DEVELOPMENT mode (npm run dev)...${NC}\n"
+  export NODE_ENV=development
+  node server.mjs
+else
+  export NODE_ENV=production
+  echo -e "\n${GREEN}${BOLD}=========================================================="
+  echo "   ⚡ Menjalankan Aidev Agent..."
+  echo "   🌐 Browser akan otomatis terbuka dalam mode desktop window."
+  echo "   Tekan Ctrl + C di terminal ini untuk berhenti."
+  echo -e "==========================================================${NC}\n"
+  node server.mjs
+fi
