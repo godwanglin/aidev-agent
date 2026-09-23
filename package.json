@@ -2,7 +2,7 @@
   "name": "aidev-coding-agent",
   "version": "1.0.0",
   "description": "Aidev Desktop Coding Agent",
-  "author": "Aidev Team",
+  "author": "Aidev Team <support@aidev.com>",
   "private": true,
   "type": "module",
   "repository": {
@@ -12,7 +12,7 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "node server.mjs",
-    "build": "next build --no-lint",
+    "build": "next build",
     "start": "NODE_ENV=production node server.mjs",
     "linux": "bash aidev-desktop.sh",
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
@@ -80,6 +80,7 @@
         "deb",
         "tar.gz"
       ],
+      "maintainer": "Aidev Team <support@aidev.com>",
       "category": "Development",
       "icon": "build/icon.png",
       "artifactName": "Aidev-${version}-${arch}.${ext}"

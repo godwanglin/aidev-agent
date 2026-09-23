@@ -57,7 +57,7 @@ jobs:
         run: npm run pack:npm
 
       - name: Build Windows Installer (.exe)
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,7 +112,7 @@ jobs:
         run: npm run build:electron
 
       - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
-        run: npx electron-builder --linux
+        run: npx electron-builder --linux --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
