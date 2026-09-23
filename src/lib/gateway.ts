@@ -69,8 +69,13 @@ export async function getUserEligibility(): Promise<{
     if (res.ok) {
       return await res.json();
     }
-  } catch (err) {
-    console.error('Failed fetching user eligibility:', err);
+  } catch (err: any) {
+    const isConnRefused = err?.cause?.code === 'ECONNREFUSED' || err?.code === 'ECONNREFUSED';
+    if (isConnRefused) {
+      console.warn(`[Gateway] Gateway at ${settings.gatewayUrl} is offline/unreachable (ECONNREFUSED). Using local model fallback.`);
+    } else {
+      console.warn(`[Gateway] Failed fetching user eligibility: ${err?.message || err}`);
+    }
   }
   return null;
 }
@@ -326,7 +331,11 @@ export async function getAvailableModels(forceRefresh = false): Promise<GatewayM
   }
 
   const settings = loadSettings();
-  const isAidevGateway = !settings.gatewayUrl || settings.gatewayUrl.includes('localhost:3000') || settings.gatewayUrl.includes('127.0.0.1:3000');
+  const isAidevGateway =
+    !settings.gatewayUrl ||
+    settings.gatewayUrl.includes('localhost:3000') ||
+    settings.gatewayUrl.includes('127.0.0.1:3000') ||
+    settings.gatewayUrl.includes('aidev');
 
   // 1. First try /v1/eligibility only when connecting to the Aidev AI Gateway
   if (isAidevGateway) {
@@ -357,8 +366,11 @@ export async function getAvailableModels(forceRefresh = false): Promise<GatewayM
 
         return models;
       }
-    } catch (eligErr) {
-      console.warn('Could not query /v1/eligibility, falling back to /v1/models:', eligErr);
+    } catch (eligErr: any) {
+      const isConnRefused = eligErr?.cause?.code === 'ECONNREFUSED' || eligErr?.code === 'ECONNREFUSED';
+      if (!isConnRefused) {
+        console.warn('Could not query /v1/eligibility, falling back to /v1/models:', eligErr?.message || eligErr);
+      }
     }
   }
 
