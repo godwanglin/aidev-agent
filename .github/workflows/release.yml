@@ -111,6 +111,9 @@ jobs:
       - name: Compile Electron Main Process
         run: npm run build:electron
 
+      - name: Clean dev CLI symlinks
+        run: rm -rf node_modules/.bin
+
       - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
         run: npx electron-builder --linux --publish never
         env:
