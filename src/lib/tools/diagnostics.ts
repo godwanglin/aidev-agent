@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
-import ts from 'typescript';
+// Dynamic optional import for runtime safety when typescript is in devDependencies
 import { sanitizeAndResolvePath } from '../security';
 
 export interface DiagnosticsParams {
@@ -46,8 +46,21 @@ export interface FindReferencesResult {
   references: ReferenceItem[];
 }
 
-function loadTypeScript(_workdir?: string): typeof ts {
-  return ts;
+function loadTypeScript(workdir?: string): any | null {
+  if (workdir) {
+    try {
+      const localTsPath = path.join(workdir, 'node_modules', 'typescript');
+      if (fs.existsSync(localTsPath)) {
+        const req = typeof __non_webpack_require__ !== 'undefined' ? __non_webpack_require__ : eval('require');
+        return req(localTsPath);
+      }
+    } catch {}
+  }
+  try {
+    const req = typeof __non_webpack_require__ !== 'undefined' ? __non_webpack_require__ : eval('require');
+    return req('typescript');
+  } catch {}
+  return null;
 }
 
 export async function executeGetDiagnostics(
