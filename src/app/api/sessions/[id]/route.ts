@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { sessionRepo, messageRepo, snapshotRepo, subagentRepo, auditRepo, compactionRepo } from '@/lib/db';
 import { isSessionOrchestratorRunning } from '@/lib/orchestrator';

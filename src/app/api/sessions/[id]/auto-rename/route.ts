@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { sessionRepo, messageRepo } from '@/lib/db';
 import { getOpenAIClient } from '@/lib/gateway';

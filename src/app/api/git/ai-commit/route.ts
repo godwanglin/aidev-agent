@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { gitService } from '@/lib/git/git-service';
 import { getOpenAIClient } from '@/lib/gateway';

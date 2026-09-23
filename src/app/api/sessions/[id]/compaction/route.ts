@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { compactionRepo, messageRepo, sessionRepo } from '@/lib/db';
 import { runCompaction, estimateActiveSessionTokens, getModelContextWindow, COMPACTION_CONSTANTS } from '@/lib/compaction';

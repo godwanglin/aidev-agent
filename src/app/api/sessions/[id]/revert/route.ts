@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { revertSnapshot } from '@/lib/snapshot';
 import { sessionRepo, projectRepo } from '@/lib/db';

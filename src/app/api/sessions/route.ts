@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { sessionRepo, projectRepo, SessionRecord } from '@/lib/db';

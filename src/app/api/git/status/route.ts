@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { gitResolver } from '@/lib/git/git-resolver';
 import { gitService } from '@/lib/git/git-service';

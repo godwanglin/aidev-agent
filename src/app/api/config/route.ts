@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { loadSettings, saveSettings, getStoragePaths } from '@/lib/storage';
 import fs from 'fs';
