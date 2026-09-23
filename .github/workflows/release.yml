@@ -115,7 +115,7 @@ jobs:
         run: rm -rf node_modules/.bin
 
       - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
-        run: npx electron-builder --linux --publish never
+        run: node ./node_modules/electron-builder/cli.js --linux --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
