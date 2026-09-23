@@ -11,6 +11,15 @@ import path, { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Safely load node-pty if available with fallback to child_process.spawn
+let nodePty = null;
+try {
+  const ptyModule = await import('node-pty');
+  nodePty = ptyModule.default || ptyModule;
+} catch {
+  // node-pty not available, will use child_process fallback
+}
+
 const rawEnv = (process.env.NODE_ENV || '').trim().toLowerCase();
 const hasBuildId = fs.existsSync(path.join(__dirname, '.next', 'BUILD_ID'));
 // Run production mode only if BUILD_ID exists and user didn't request development
