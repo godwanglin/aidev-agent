@@ -56,6 +56,9 @@ jobs:
       - name: Clean Next.js internal build folders
         run: rm -rf .next/node_modules .next/types .next/diagnostics
 
+      - name: Prune non-runtime files from node_modules
+        run: node scripts/prune-node-modules.mjs
+
       - name: Build Windows Installer (.exe)
         run: npx electron-builder --win --publish never
         env:
@@ -115,6 +118,9 @@ jobs:
         run: |
           rm -rf .next/node_modules .next/types .next/diagnostics
           find .next -type l -delete || true
+
+      - name: Prune non-runtime files from node_modules
+        run: node scripts/prune-node-modules.mjs
 
       - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
         run: npx electron-builder --linux --publish never
