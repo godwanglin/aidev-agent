@@ -129,7 +129,7 @@ function setupTerminalWebSocket(wss) {
       ? ['-NoLogo']
       : isWindows && shell.toLowerCase().includes('cmd')
       ? ['/Q']
-      : [];
+      : ['-i'];
 
     let termSession;
 
@@ -237,7 +237,7 @@ function setupTerminalWebSocket(wss) {
     } else {
       // Fallback: child_process.spawn with process-tree SIGINT / taskkill
       const fallbackShell = isWindows ? process.env.COMSPEC || 'cmd.exe' : process.env.SHELL || '/bin/bash';
-      const fallbackArgs = isWindows ? ['/Q'] : [];
+      const fallbackArgs = isWindows ? ['/Q'] : ['-i'];
 
       let child;
       try {
@@ -247,6 +247,7 @@ function setupTerminalWebSocket(wss) {
             ...process.env,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
+            PS1: isWindows ? '' : '\\u@\\h:\\w\\$ ',
           },
         });
       } catch (err) {
@@ -256,6 +257,15 @@ function setupTerminalWebSocket(wss) {
       }
 
       let isExited = false;
+
+      // Nudge Linux shell to output initial prompt in pipe mode
+      if (!isWindows) {
+        setTimeout(() => {
+          if (!isExited && child.stdin && !child.stdin.destroyed) {
+            child.stdin.write('\n');
+          }
+        }, 150);
+      }
 
       termSession = {
         id: sessionId,
@@ -274,7 +284,8 @@ function setupTerminalWebSocket(wss) {
             const ch = inputData[i];
             if (ch === '\r' || ch === '\n') {
               sendOutput('\r\n');
-              child.stdin.write(termSession.lineBuffer + '\r\n');
+              const newline = isWindows ? '\r\n' : '\n';
+              child.stdin.write(termSession.lineBuffer + newline);
               if (termSession.lineBuffer.trim()) {
                 termSession.history.push(termSession.lineBuffer);
               }
