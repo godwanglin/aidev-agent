@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import net from 'net';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, execSync, spawnSync } from 'child_process';
 import url, { fileURLToPath } from 'url';
@@ -11,25 +12,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const rawEnv = (process.env.NODE_ENV || '').trim().toLowerCase();
-const dev = rawEnv === 'development';
+const hasBuildId = fs.existsSync(path.join(__dirname, '.next', 'BUILD_ID'));
+// Run production mode only if BUILD_ID exists and user didn't request development
+const dev = rawEnv === 'development' || !hasBuildId;
 if (!dev) {
   process.env.NODE_ENV = 'production';
+} else {
+  process.env.NODE_ENV = 'development';
+  if (!hasBuildId && rawEnv !== 'development') {
+    console.log('[Aidev] No production build (.next/BUILD_ID) found. Starting in on-demand development mode...');
+  }
 }
 const hostname = '0.0.0.0';
 const START_PORT = 3001;
 const MAX_PORT = 3010;
-
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-
-let nodePty = null;
-try {
-  nodePty = require('node-pty');
-  console.log('[Terminal] node-pty native ConPTY initialized successfully.');
-} catch (err) {
-  console.warn('[Terminal] node-pty not available, fallback to child_process.spawn:', err.message);
-}
 
 // Kill child processes of a parent process on Windows / POSIX
 function killChildProcessTree(parentPid) {

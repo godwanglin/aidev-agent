@@ -52,12 +52,14 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Check & Auto-Build Next.js Production Bundle (.next)
+# 3. Check & Auto-Build Next.js Production Bundle (.next/BUILD_ID)
 # ------------------------------------------------------------------------------
-if [ ! -d ".next" ] || [ "$1" = "--rebuild" ]; then
-  echo -e "\n${BLUE}🔨 Membangun Next.js production bundle (npm run build)...${NC}"
-  npm run build
-  echo -e "${GREEN}✅ Build selesai!${NC}"
+if [ "$1" != "--dev" ]; then
+  if [ ! -f ".next/BUILD_ID" ] || [ "$1" = "--rebuild" ]; then
+    echo -e "\n${BLUE}🔨 Membangun Next.js production bundle (npm run build)...${NC}"
+    npm run build
+    echo -e "${GREEN}✅ Build selesai!${NC}"
+  fi
 fi
 
 # ------------------------------------------------------------------------------
