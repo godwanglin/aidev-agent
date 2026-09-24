@@ -305,10 +305,10 @@ export function CustomTitlebar() {
         break;
 
       case 'docs':
-        api?.openExternal?.('https://github.com/aiden240/coding-agent#readme');
+        api?.openExternal?.('https://github.com/godwanglin/aidev-agent#readme');
         break;
       case 'report-issue':
-        api?.openExternal?.('https://github.com/aiden240/coding-agent/issues');
+        api?.openExternal?.('https://github.com/godwanglin/aidev-agent/issues');
         break;
       case 'shortcuts':
         setShowShortcutsModal(true);
