@@ -65,12 +65,17 @@ jobs:
 
       - name: Build Windows Online & Offline Installers (.exe)
         run: |
+          rm -rf release release-web-staging
+          mkdir -p release-web-staging
           npx electron-builder --win nsis-web --publish never
           if [ -d "release/nsis-web" ]; then
-            cp -f release/nsis-web/*.exe release/ || true
-            cp -f release/nsis-web/*.7z release/ || true
+            cp -vf release/nsis-web/*.exe release-web-staging/ || true
+            cp -vf release/nsis-web/*.7z release-web-staging/ || true
           fi
+          cp -vf release/*.7z release-web-staging/ 2>/dev/null || true
           npx electron-builder --win nsis --publish never
+          cp -vf release-web-staging/* release/ || true
+          echo "=== [FINAL WINDOWS RELEASE ASSETS] ==="
           ls -lh release/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

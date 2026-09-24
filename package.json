@@ -116,6 +116,11 @@
       "icon": "build/icon.png",
       "artifactName": "Aidev-${version}-${arch}.${ext}"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "godwanglin",
+      "repo": "aidev-agent"
+    },
     "nsis": {
       "artifactName": "Aidev-Offline-Setup-${version}.${ext}",
       "oneClick": false,
@@ -129,7 +134,6 @@
     },
     "nsisWeb": {
       "artifactName": "Aidev-Setup-${version}.${ext}",
-      "appPackageUrl": "https://github.com/godwanglin/aidev-agent/releases/download/v${version}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
