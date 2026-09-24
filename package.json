@@ -1,6 +1,6 @@
 {
   "name": "aidev-coding-agent",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Aidev Desktop Coding Agent",
   "author": "Aidev Team <support@aidev.com>",
   "private": true,
@@ -67,6 +67,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "nsis-web",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.png",
@@ -95,7 +101,19 @@
       "artifactName": "Aidev-${version}-${arch}.${ext}"
     },
     "nsis": {
+      "artifactName": "Aidev-Offline-Setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aidev Desktop",
+      "uninstallDisplayName": "Aidev Desktop Coding Agent",
+      "include": "build/installer.nsh"
+    },
+    "nsisWeb": {
       "artifactName": "Aidev-Setup.${ext}",
+      "appPackageUrl": "https://github.com/godwanglin/aidev-agent/releases/download/v${version}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

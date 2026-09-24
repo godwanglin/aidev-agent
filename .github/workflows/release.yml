@@ -59,8 +59,15 @@ jobs:
       - name: Prune non-runtime files from node_modules
         run: node scripts/prune-node-modules.mjs
 
-      - name: Build Windows Installer (.exe)
-        run: npx electron-builder --win --publish never
+      - name: Build Windows Online & Offline Installers (.exe)
+        run: |
+          npx electron-builder --win nsis-web --publish never
+          if [ -d "release/nsis-web" ]; then
+            cp -f release/nsis-web/*.exe release/ || true
+            cp -f release/nsis-web/*.7z release/ || true
+          fi
+          npx electron-builder --win nsis --publish never
+          ls -lh release/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -70,6 +77,7 @@ jobs:
           name: windows-artifacts
           path: |
             release/*.exe
+            release/*.7z
             release/*.blockmap
             release/latest.yml
           if-no-files-found: warn
