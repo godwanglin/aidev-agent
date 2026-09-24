@@ -26,12 +26,17 @@ export function initAutoUpdater(mainWindow: BrowserWindow, onBeforeInstall?: () 
     }
   };
 
+  let lastStatusPayload: any = null;
+  let lastCheckTime = 0;
+
   const sendStatus = (payload: any) => {
+    const merged = {
+      version: latestAvailableVersion,
+      ...payload,
+    };
+    lastStatusPayload = merged;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('updater-status', {
-        version: latestAvailableVersion,
-        ...payload,
-      });
+      mainWindow.webContents.send('updater-status', merged);
     }
   };
 
@@ -98,7 +103,15 @@ export function initAutoUpdater(mainWindow: BrowserWindow, onBeforeInstall?: () 
 
   // Renderer triggers
   ipcMain.on('check-for-updates', () => {
+    if (
+      lastStatusPayload &&
+      (lastStatusPayload.status === 'downloading' || lastStatusPayload.status === 'downloaded')
+    ) {
+      sendStatus(lastStatusPayload);
+      return;
+    }
     if (app.isPackaged && hasUpdateConfig) {
+      lastCheckTime = Date.now();
       autoUpdater.checkForUpdates().catch(() => {});
     } else {
       sendStatus({ status: 'not-available' });
@@ -310,10 +323,42 @@ fi
     }
   });
 
-  // Initial check 5 seconds after startup if packaged and update config exists
+  // Replay current update status if renderer reloads (Ctrl+R)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.on('did-finish-load', () => {
+      if (
+        lastStatusPayload &&
+        (lastStatusPayload.status === 'available' ||
+          lastStatusPayload.status === 'downloading' ||
+          lastStatusPayload.status === 'downloaded')
+      ) {
+        setTimeout(() => sendStatus(lastStatusPayload), 600);
+      }
+    });
+  }
+
+  // Initial check 5 seconds after startup + periodic every 10m + on window focus
   if (app.isPackaged && hasUpdateConfig) {
-    setTimeout(() => {
+    const triggerAutoCheck = () => {
+      if (
+        lastStatusPayload &&
+        (lastStatusPayload.status === 'downloading' || lastStatusPayload.status === 'downloaded')
+      ) {
+        return;
+      }
+      lastCheckTime = Date.now();
       autoUpdater.checkForUpdates().catch(() => {});
-    }, 5000);
+    };
+
+    setTimeout(triggerAutoCheck, 5000);
+    setInterval(triggerAutoCheck, 10 * 60 * 1000);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.on('focus', () => {
+        if (Date.now() - lastCheckTime > 3 * 60 * 1000) {
+          triggerAutoCheck();
+        }
+      });
+    }
   }
 }

@@ -131,7 +131,12 @@ export const AdvancedSidebar: React.FC<AdvancedSidebarProps> = ({
       const api = (window as any).electronAPI;
       if (api?.onUpdateStatus) {
         const unsub = api.onUpdateStatus((info: any) => {
-          if (info && (info.status === 'available' || info.status === 'downloaded')) {
+          if (
+            info &&
+            (info.status === 'available' ||
+              info.status === 'downloading' ||
+              info.status === 'downloaded')
+          ) {
             setUpdateInfo(info);
           } else if (info && (info.status === 'not-available' || info.status === 'error')) {
             setUpdateInfo(null);

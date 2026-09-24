@@ -43,16 +43,56 @@ export async function GET() {
       memoryMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     };
 
+    // 4. Check GitHub latest release version
+    let latestVersion = version;
+    let updateAvailable = false;
+    let releaseUrl = 'https://github.com/godwanglin/aidev-agent/releases/latest';
+    try {
+      const ghRes = await fetch('https://api.github.com/repos/godwanglin/aidev-agent/releases/latest', {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'Aidev-Desktop-Updater',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (ghRes.ok) {
+        const ghData = await ghRes.json();
+        const rawTag = String(ghData?.tag_name || '').replace(/^v/i, '').trim();
+        if (rawTag) {
+          latestVersion = rawTag;
+          if (ghData?.html_url) releaseUrl = ghData.html_url;
+          const parseParts = (v: string) =>
+            v
+              .split('-')[0]
+              .split('.')
+              .map((n) => parseInt(n, 10) || 0);
+          const [cMaj = 0, cMin = 0, cPat = 0] = parseParts(version);
+          const [lMaj = 0, lMin = 0, lPat = 0] = parseParts(latestVersion);
+          if (
+            lMaj > cMaj ||
+            (lMaj === cMaj && lMin > cMin) ||
+            (lMaj === cMaj && lMin === cMin && lPat > cPat)
+          ) {
+            updateAvailable = true;
+          }
+        }
+      }
+    } catch {}
+
     return NextResponse.json({
       name,
       version: `v${version}`,
+      latestVersion: `v${latestVersion}`,
+      updateAvailable,
+      releaseUrl,
       git: {
         commit,
         branch,
         clean: isClean,
       },
       runtime,
-      status: 'latest',
+      status: updateAvailable ? 'update_available' : 'latest',
       checkedAt: Date.now(),
     });
   } catch (err: any) {

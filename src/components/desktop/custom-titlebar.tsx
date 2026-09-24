@@ -98,6 +98,7 @@ export function CustomTitlebar() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuType>(null);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [currentAppVersion, setCurrentAppVersion] = useState<string>('');
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [shortcutSearch, setShortcutSearch] = useState('');
 
@@ -108,6 +109,15 @@ export function CustomTitlebar() {
       .then((r) => r.json())
       .then((d) => {
         setIsLoggedIn(Boolean(d?.settings?.apiKey && d.settings.apiKey.trim().length > 0));
+      })
+      .catch(() => {});
+
+    fetch('/api/system/version')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.version) {
+          setCurrentAppVersion(String(d.version).replace(/^v/i, ''));
+        }
       })
       .catch(() => {});
 
@@ -127,6 +137,14 @@ export function CustomTitlebar() {
       const api = (window as any).electronAPI;
 
       api.isMaximized().then((max: boolean) => setIsMaximized(max));
+
+      api.getAppVersion?.()
+        .then((ver: string) => {
+          if (ver) {
+            setCurrentAppVersion(String(ver).replace(/^v/i, ''));
+          }
+        })
+        .catch(() => {});
 
       const unregisterMax = api.onMaximizeChange((max: boolean) => {
         setIsMaximized(max);
@@ -345,9 +363,21 @@ export function CustomTitlebar() {
         setUpdateStatus({ status: 'checking' });
         setShowAboutModal(true);
         api?.checkForUpdates?.();
+        fetch('/api/system/version')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d?.updateAvailable && d?.latestVersion) {
+              setUpdateStatus((prev) =>
+                prev.status === 'checking' || prev.status === 'not-available' || prev.status === 'idle'
+                  ? { status: 'available', version: String(d.latestVersion).replace(/^v/i, '') }
+                  : prev
+              );
+            }
+          })
+          .catch(() => {});
         setTimeout(() => {
           setUpdateStatus((prev) => (prev.status === 'checking' ? { status: 'not-available' } : prev));
-        }, 1200);
+        }, 12000);
         break;
       case 'about':
         setShowAboutModal(true);
@@ -945,7 +975,9 @@ export function CustomTitlebar() {
             <div>
               <h3 className="text-base font-semibold text-white">Aidev Desktop</h3>
               <p className="text-xs text-[#a1a1aa] mt-0.5">Autonomous Local AI Coding Agent</p>
-              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.8</p>
+              <p className="text-[11px] font-mono text-[#71717a] mt-1">
+                Version {currentAppVersion || '1.1.0'}
+              </p>
             </div>
             {updateStatus.status === 'checking' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-[11px] text-[#a1a1aa]">
@@ -956,7 +988,7 @@ export function CustomTitlebar() {
             {updateStatus.status === 'not-available' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/25 text-[11px] text-[#4ade80]">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Sudah menggunakan versi terbaru (v1.0.8)</span>
+                <span>Sudah menggunakan versi terbaru (v{currentAppVersion || '1.1.0'})</span>
               </div>
             )}
             <p className="text-xs text-[#d4d4d8] leading-relaxed">

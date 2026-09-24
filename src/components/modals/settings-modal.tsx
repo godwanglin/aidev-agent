@@ -435,7 +435,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [terminalTimeout, setTerminalTimeout] = useState(120);
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<'latest' | 'checking' | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<'latest' | 'checking' | 'update_available' | null>(null);
 
   // Local Permissions Modal states (Phase 4)
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
@@ -862,9 +862,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   interface SystemVersionData {
     name: string;
     version: string;
+    latestVersion?: string;
+    updateAvailable?: boolean;
+    releaseUrl?: string;
     git?: { commit: string; branch: string; clean: boolean };
     runtime?: { node: string; platform: string; arch: string; uptimeSeconds: number; memoryMb: number };
-    status: 'latest' | 'checking';
+    status: 'latest' | 'checking' | 'update_available';
     checkedAt: number;
   }
   const [versionData, setVersionData] = useState<SystemVersionData | null>(null);
@@ -886,11 +889,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsCheckingUpdate(true);
     setUpdateStatus('checking');
     try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.checkForUpdates) {
+        (window as any).electronAPI.checkForUpdates();
+      }
       const res = await fetch('/api/system/version');
       if (res.ok) {
         const data = await res.json();
         setVersionData(data);
-        setUpdateStatus('latest');
+        setUpdateStatus(data.updateAvailable ? 'update_available' : 'latest');
       } else {
         setUpdateStatus('latest');
       }
@@ -2419,11 +2425,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[12px] font-medium text-[#f0f0f2]">
-                          Aidev Desktop {versionData ? versionData.version : 'v1.0.0'}
+                          Aidev Desktop {versionData ? versionData.version : 'v1.1.0'}
                         </span>
-                        <span className="px-2 py-0.5 rounded text-[10.5px] bg-[#1a2e1a] text-[#4ade80] border border-[#235323] font-medium">
-                          {updateStatus === 'latest' ? 'Up to date' : 'Active'}
-                        </span>
+                        {versionData?.updateAvailable ? (
+                          <span className="px-2 py-0.5 rounded text-[10.5px] bg-blue-500/15 text-blue-400 border border-blue-500/30 font-medium">
+                            Update Available ({versionData.latestVersion})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10.5px] bg-[#1a2e1a] text-[#4ade80] border border-[#235323] font-medium">
+                            {updateStatus === 'latest' ? 'Up to date' : 'Active'}
+                          </span>
+                        )}
                       </div>
                       {versionData && (
                         <div className="text-[11px] text-[#868686] font-mono flex items-center gap-2">
@@ -2436,12 +2448,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={handleCheckForUpdates}
+                      onClick={() => {
+                        if (versionData?.updateAvailable) {
+                          const api = (window as any).electronAPI;
+                          if (api?.checkForUpdates) {
+                            api.checkForUpdates();
+                          } else if (versionData.releaseUrl) {
+                            window.open(versionData.releaseUrl, '_blank');
+                          }
+                        } else {
+                          handleCheckForUpdates();
+                        }
+                      }}
                       disabled={isCheckingUpdate}
-                      className="px-3 py-1.5 rounded-lg bg-[#202022] hover:bg-[#28282c] border border-[#2e2e34] text-[11.5px] font-medium text-[#dededf] transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
+                      className={`px-3 py-1.5 rounded-lg border text-[11.5px] font-medium transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 self-start sm:self-auto ${
+                        versionData?.updateAvailable
+                          ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white shadow-sm'
+                          : 'bg-[#202022] hover:bg-[#28282c] border-[#2e2e34] text-[#dededf]'
+                      }`}
                     >
                       {isCheckingUpdate && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#3b82f6]" />}
-                      <span>{isCheckingUpdate ? 'Checking...' : updateStatus === 'latest' ? 'Up to date' : 'Check for Updates'}</span>
+                      <span>
+                        {isCheckingUpdate
+                          ? 'Checking...'
+                          : versionData?.updateAvailable
+                          ? `Update to ${versionData.latestVersion}`
+                          : 'Check for Updates'}
+                      </span>
                     </button>
                   </div>
                 </div>
