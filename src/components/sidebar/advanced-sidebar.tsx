@@ -609,9 +609,18 @@ export const AdvancedSidebar: React.FC<AdvancedSidebarProps> = ({
               <div key={proj.id} className="space-y-1">
                 {/* Project Folder Row */}
                 <div
-                  onClick={() => toggleProjectExpand(proj.id)}
+                  onClick={() => {
+                    toggleProjectExpand(proj.id);
+                    if (currentProject?.id !== proj.id && onNewSessionInProject) {
+                      onNewSessionInProject(proj.id);
+                    }
+                  }}
                   className={`group flex items-center justify-between px-2.5 h-[34px] rounded-lg text-[13.5px] font-medium transition cursor-pointer select-none ${
-                    isLight
+                    currentProject?.id === proj.id
+                      ? isLight
+                        ? 'bg-[#eaecee] text-[#000000]'
+                        : 'bg-[#18181f] text-[#ffffff]'
+                      : isLight
                       ? 'text-[#2c2c34] hover:text-[#000000] hover:bg-[#eaecee]'
                       : 'text-[#c4c4c8] hover:text-[#dededf] hover:bg-[#15151a]'
                   }`}

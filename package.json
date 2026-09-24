@@ -1,6 +1,6 @@
 {
   "name": "aidev-coding-agent",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Aidev Desktop Coding Agent",
   "author": "Aidev Team <support@aidev.com>",
   "private": true,
@@ -32,7 +32,7 @@
     "productName": "Aidev Desktop",
     "executableName": "Aidev",
     "asar": false,
-    "compression": "maximum",
+    "compression": "normal",
     "electronLanguages": [
       "en-US",
       "id"

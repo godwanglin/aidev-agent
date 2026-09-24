@@ -807,18 +807,8 @@ export function CustomTitlebar() {
           )}
         </div>
 
-        {/* Right Section: Workspace Panel Toggle (when logged in) + Window Controls (Minimize, Maximize/Restore, Close) */}
+        {/* Right Section: Window Controls (Minimize, Maximize/Restore, Close) */}
         <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: 'no-drag' } as any}>
-          {isLoggedIn && (
-            <button
-              type="button"
-              onClick={() => dispatchAction('toggle-auxiliary')}
-              className="w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-white hover:bg-white/[0.08] transition cursor-pointer mr-1"
-              title="Toggle Workspace Panel (Ctrl+Shift+B)"
-            >
-              <PanelRight className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button
             onClick={() => api?.minimize?.()}
             className="w-10 h-7 flex items-center justify-center text-[#8e8e93] hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"

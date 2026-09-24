@@ -185,9 +185,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleOpenBilling = useCallback(() => {
-    const billingUrl = 'http://localhost:3000/billing';
+    const billingUrl = 'https://aidev.weebinhub.biz.id/billing';
     if (typeof window !== 'undefined') {
-      window.open(billingUrl, '_blank');
+      const api = (window as any).electronAPI;
+      if (api?.openExternal) {
+        api.openExternal(billingUrl);
+      } else {
+        window.open(billingUrl, '_blank', 'noopener,noreferrer');
+      }
     }
   }, []);
 
@@ -422,11 +427,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Close model picker and attach menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node | null;
+      if (target instanceof Element && target.closest('[data-floating-popover="true"]')) {
+        return;
+      }
+      if (modelPickerRef.current && !modelPickerRef.current.contains(target as Node)) {
         setShowModelPicker(false);
         setHoveredLockedModel(null);
       }
-      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(target as Node)) {
         setShowAttachMenu(false);
       }
     };
@@ -1842,6 +1851,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <div className="p-1 space-y-0.5">
                     {models.map((m) => {
                       const isLocked = m.eligible === false;
+                      const hasTierBadge = Boolean(m.minTierName && m.minTier && m.minTier !== 'FREE');
                       const isSelected = m.id === selectedModel;
 
                       return (
@@ -1849,7 +1859,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                           key={m.id}
                           type="button"
                           onMouseEnter={(e) => {
-                            if (isLocked) {
+                            if (isLocked || hasTierBadge) {
                               if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                               const rect = e.currentTarget.getBoundingClientRect();
                               setHoveredLockedModel({ model: m, rect });
@@ -1944,7 +1954,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {/* Upgrade flyout popover matching Screenshot 1 & 2 */}
                 {hoveredLockedModel && typeof document !== 'undefined' && createPortal(
                   <div
+                    data-floating-popover="true"
                     style={calculatePopoverStyle(hoveredLockedModel.rect)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onMouseEnter={() => {
                       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                     }}

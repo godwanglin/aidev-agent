@@ -124,8 +124,14 @@ export const UsageCard: React.FC<UsageCardProps> = ({
   const percentage = Math.min(100, Math.max(0, credits.percentageUsed || 0));
 
   const handleOpenBilling = () => {
+    const billingUrl = 'https://aidev.weebinhub.biz.id/billing';
     if (typeof window !== 'undefined') {
-      window.open('http://localhost:3000/billing', '_blank');
+      const api = (window as any).electronAPI;
+      if (api?.openExternal) {
+        api.openExternal(billingUrl);
+      } else {
+        window.open(billingUrl, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 

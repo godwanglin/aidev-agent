@@ -69,14 +69,19 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
 
   // Copied feedback
   const [isCopied, setIsCopied] = useState(false);
-
-  // Detect Electron / desktop environment
-  const isElectron = typeof window !== 'undefined' && Boolean(
-    (window as any).electron ||
-    (window as any).electronAPI ||
-    (window as any).process?.versions?.electron ||
-    navigator.userAgent.toLowerCase().includes('electron')
-  );
+  const [isOpeningNative, setIsOpeningNative] = useState(false);
+  const [platform, setPlatform] = useState<'win32' | 'linux' | 'darwin'>(() => {
+    if (typeof window !== 'undefined') {
+      const electronPlat = (window as any).electronAPI?.platform;
+      if (electronPlat === 'linux' || electronPlat === 'darwin' || electronPlat === 'win32') {
+        return electronPlat;
+      }
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('linux')) return 'linux';
+      if (ua.includes('mac')) return 'darwin';
+    }
+    return 'win32';
+  });
 
   const loadDirectory = useCallback(async (pathQuery?: string) => {
     setLoading(true);
@@ -90,6 +95,10 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
         : '/api/files/dirs';
       const res = await fetch(url);
       const data = await res.json();
+
+      if (data.platform === 'linux' || data.platform === 'darwin' || data.platform === 'win32') {
+        setPlatform(data.platform);
+      }
 
       if (data.error && (!data.dirs || data.dirs.length === 0)) {
         setError(data.error);
@@ -179,14 +188,16 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
     });
   }, [items, searchQuery]);
 
-  // Selected full path
+  // Selected full path (supports both Windows "\" and Linux/POSIX "/")
   const effectiveSelectedPath = useMemo(() => {
     if (selectedDir) {
-      const sep = currentPath.endsWith('\\') || currentPath.endsWith('/') ? '' : '\\';
-      return `${currentPath}${sep}${selectedDir}`;
+      const isPosix = currentPath.startsWith('/') || platform !== 'win32';
+      const sep = isPosix ? '/' : '\\';
+      const needsSep = !currentPath.endsWith('\\') && !currentPath.endsWith('/');
+      return `${currentPath}${needsSep ? sep : ''}${selectedDir}`;
     }
     return currentPath;
-  }, [currentPath, selectedDir]);
+  }, [currentPath, selectedDir, platform]);
 
   // Navigation handlers
   const handleSelectShortcut = (targetPath: string) => {
@@ -198,8 +209,10 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
   };
 
   const handleDirDoubleClick = (dirName: string) => {
-    const sep = currentPath.endsWith('\\') || currentPath.endsWith('/') ? '' : '\\';
-    loadDirectory(`${currentPath}${sep}${dirName}`);
+    const isPosix = currentPath.startsWith('/') || platform !== 'win32';
+    const sep = isPosix ? '/' : '\\';
+    const needsSep = !currentPath.endsWith('\\') && !currentPath.endsWith('/');
+    loadDirectory(`${currentPath}${needsSep ? sep : ''}${dirName}`);
   };
 
   const handleNavigateUp = () => {
@@ -207,6 +220,53 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
       loadDirectory(parentPath);
     }
   };
+
+  // Native OS directory picker (Windows Explorer / Linux File Manager / macOS Finder)
+  const handleOpenNativePicker = async () => {
+    if (isOpeningNative) return;
+    setIsOpeningNative(true);
+    try {
+      const targetStartPath = effectiveSelectedPath || currentPath;
+      let pickedPath: string | null = null;
+
+      // 1. Primary: Electron IPC dialog.showOpenDialog
+      if (typeof window !== 'undefined' && typeof (window as any).electronAPI?.openDirectoryPicker === 'function') {
+        pickedPath = await (window as any).electronAPI.openDirectoryPicker(targetStartPath);
+      } else {
+        // 2. Fallback: Backend native OS dialog (PowerShell on Windows, zenity/kdialog on Linux/Ubuntu, osascript on macOS)
+        const res = await fetch('/api/files/dirs', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPath: targetStartPath }),
+        });
+        const data = await res.json();
+        pickedPath = data?.selectedPath || null;
+      }
+
+      if (pickedPath) {
+        onSelectDirectory(pickedPath);
+        onClose();
+      }
+    } catch (err) {
+      console.error('Failed to open native directory picker:', err);
+    } finally {
+      setIsOpeningNative(false);
+    }
+  };
+
+  const nativePickerLabel =
+    platform === 'linux'
+      ? 'File Manager'
+      : platform === 'darwin'
+      ? 'Finder'
+      : 'Windows Explorer';
+
+  const nativePickerTitle =
+    platform === 'linux'
+      ? 'Open native Linux / Ubuntu File Manager dialog'
+      : platform === 'darwin'
+      ? 'Open native macOS Finder dialog'
+      : 'Open native Windows Explorer dialog';
 
   // Submit manual path
   const handleManualPathSubmit = (e?: React.FormEvent) => {
@@ -313,22 +373,21 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Native picker button (only in Electron desktop environment) */}
-            {isElectron && (
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    (window as any).electronAPI?.openDirectoryPicker?.();
-                  } catch {}
-                }}
-                className="px-2.5 py-1 rounded-lg bg-[#1f1f1f] hover:bg-[#282828] border border-[#2d2d2d] text-[#aaaaaa] hover:text-white text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5"
-                title="Open native Windows Explorer dialog"
-              >
+            {/* Native OS picker button (Windows Explorer / Linux File Manager / macOS Finder) */}
+            <button
+              type="button"
+              onClick={handleOpenNativePicker}
+              disabled={isOpeningNative}
+              className="px-2.5 py-1 rounded-lg bg-[#1f1f1f] hover:bg-[#282828] disabled:opacity-50 border border-[#2d2d2d] text-[#aaaaaa] hover:text-white text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5"
+              title={nativePickerTitle}
+            >
+              {isOpeningNative ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Windows Explorer</span>
-              </button>
-            )}
+              )}
+              <span>{nativePickerLabel}</span>
+            </button>
 
             <button
               type="button"
@@ -475,7 +534,10 @@ export const DirectoryPickerModal: React.FC<DirectoryPickerModalProps> = ({
                 </div>
                 <div className="space-y-0.5 mt-1">
                   {drives.map((drv) => {
-                    const isActive = currentPath.toLowerCase().startsWith(drv.toLowerCase());
+                    const isActive =
+                      drv === '/'
+                        ? currentPath === '/' || (!drives.some((d) => d !== '/' && currentPath.startsWith(d)) && currentPath.startsWith('/'))
+                        : currentPath.toLowerCase().startsWith(drv.toLowerCase());
                     return (
                       <button
                         key={drv}

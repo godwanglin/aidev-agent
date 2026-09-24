@@ -31,6 +31,7 @@ export interface ElectronAPI {
   resetZoom: () => void;
   onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void;
   onOpenProjectPath: (callback: (projectPath: string) => void) => () => void;
+  openDirectoryPicker: (defaultPath?: string) => Promise<string | null>;
 }
 
 const electronAPI: ElectronAPI = {
@@ -79,6 +80,9 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.removeListener('open-project-path', handler);
     };
   },
+
+  openDirectoryPicker: (defaultPath?: string) =>
+    ipcRenderer.invoke('open-directory-picker', defaultPath),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

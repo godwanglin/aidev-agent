@@ -848,7 +848,7 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
       ? message.content.match(/https?:\/\/[^\s)]+(?:billing|pricing)[^\s)]*/i) ||
         (isBillingError ? message.content.match(/https?:\/\/[^\s)]+/i) : null)
       : null;
-  const billingUrl = billingUrlMatch ? billingUrlMatch[0] : (isBillingError ? 'http://localhost:3000/billing' : null);
+  const billingUrl = billingUrlMatch ? billingUrlMatch[0] : (isBillingError ? 'https://aidev.weebinhub.biz.id/billing' : null);
 
   return (
     <div className={`${chatWidthClass} mx-auto w-full px-4 pt-2 pb-2.5 space-y-2 select-text font-sans group/assistant`}>

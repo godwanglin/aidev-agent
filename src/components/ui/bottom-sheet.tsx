@@ -287,6 +287,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [shouldRender, setShouldRender] = useState(isOpen);
   const isClosingRef = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const anchorRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -329,9 +330,23 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     if (isMobile || !isOpen) return;
 
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-      if (sheetRef.current && !sheetRef.current.contains(e.target as Node)) {
-        onClose();
+      const target = e.target as Node | null;
+      if (!target || !sheetRef.current) return;
+      if (sheetRef.current.contains(target)) return;
+
+      // Do not close on pointerdown if clicking a sibling trigger button inside the same dropdown wrapper,
+      // allowing the button's onClick handler to cleanly toggle the state to closed instead of re-opening.
+      const wrapperEl = anchorRef.current?.parentElement || sheetRef.current.parentElement;
+      if (wrapperEl && wrapperEl !== document.body && wrapperEl.contains(target)) {
+        return;
       }
+
+      // Do not close on pointerdown if clicking inside a portaled floating popover (e.g. Upgrade Plan card)
+      if (target instanceof Element && target.closest('[data-floating-popover="true"]')) {
+        return;
+      }
+
+      onClose();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -425,8 +440,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const shouldPortal = portal !== undefined ? portal : isMobile;
 
   if (shouldPortal && mounted && typeof document !== 'undefined') {
-    return createPortal(content, document.body);
+    return (
+      <>
+        <span ref={anchorRef} className="hidden" aria-hidden="true" />
+        {createPortal(content, document.body)}
+      </>
+    );
   }
 
-  return content;
+  return (
+    <>
+      <span ref={anchorRef} className="hidden" aria-hidden="true" />
+      {content}
+    </>
+  );
 };

@@ -132,8 +132,9 @@ export async function GET(req: Request) {
       });
     }
 
-    // Available Drives on Windows
+    // Available Drives / Mounts on Windows & Linux/Ubuntu
     const drives: string[] = [];
+    const home = os.homedir();
     if (process.platform === 'win32') {
       const letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ';
       for (let i = 0; i < letters.length; i++) {
@@ -144,13 +145,41 @@ export async function GET(req: Request) {
           }
         } catch {}
       }
+    } else if (process.platform === 'linux') {
+      drives.push('/');
+      if (fs.existsSync('/mnt')) {
+        drives.push('/mnt');
+      }
+      const userName = os.userInfo().username;
+      const userMedia = `/media/${userName}`;
+      if (fs.existsSync(userMedia)) {
+        drives.push(userMedia);
+      } else if (fs.existsSync('/media')) {
+        drives.push('/media');
+      }
+    } else if (process.platform === 'darwin') {
+      drives.push('/');
+      if (fs.existsSync('/Volumes')) {
+        drives.push('/Volumes');
+      }
     }
 
     // Quick Access shortcuts
     const quickAccess: QuickAccessItem[] = [];
-    const home = os.homedir();
     if (process.platform === 'win32' && fs.existsSync('C:\\dev')) {
       quickAccess.push({ label: 'C:\\dev', path: 'C:\\dev', type: 'dev' });
+    } else if (process.platform !== 'win32') {
+      const devCandidates = [
+        { label: '~/dev', path: path.join(home, 'dev') },
+        { label: '~/projects', path: path.join(home, 'projects') },
+        { label: '~/workspace', path: path.join(home, 'workspace') },
+      ];
+      for (const candidate of devCandidates) {
+        if (fs.existsSync(candidate.path)) {
+          quickAccess.push({ label: candidate.label, path: candidate.path, type: 'dev' });
+          break;
+        }
+      }
     }
     if (fs.existsSync(path.join(home, 'Desktop'))) {
       quickAccess.push({ label: 'Desktop', path: path.join(home, 'Desktop'), type: 'desktop' });
@@ -168,6 +197,7 @@ export async function GET(req: Request) {
     quickAccess.push({ label: 'Home', path: home, type: 'home' });
 
     return NextResponse.json({
+      platform: process.platform,
       currentPath: resolvedPath,
       parentPath,
       dirs,
@@ -178,6 +208,7 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     return NextResponse.json({
+      platform: process.platform,
       currentPath: '',
       parentPath: null,
       dirs: [],
@@ -212,5 +243,109 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, createdPath: newPath, name: cleanName });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to create folder.' }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const execFileAsync = promisify(execFile);
+
+    const body = await req.json().catch(() => ({}));
+    let startPath = body?.currentPath && fs.existsSync(body.currentPath)
+      ? path.resolve(body.currentPath)
+      : os.homedir();
+
+    if (process.platform === 'win32') {
+      const escapedPath = startPath.replace(/'/g, "''");
+      const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.FolderBrowserDialog
+$f.Description = 'Select a project directory to load into Aidev'
+$f.SelectedPath = '${escapedPath}'
+$f.ShowNewFolderButton = $true
+$top = New-Object System.Windows.Forms.Form
+$top.TopMost = $true
+if ($f.ShowDialog($top) -eq [System.Windows.Forms.DialogResult]::OK) {
+  Write-Output $f.SelectedPath
+}
+`;
+      const { stdout } = await execFileAsync('powershell.exe', [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        psScript,
+      ]);
+      const picked = stdout.trim();
+      return NextResponse.json({ selectedPath: picked || null });
+    }
+
+    if (process.platform === 'linux') {
+      const dirArg = startPath.endsWith('/') ? startPath : `${startPath}/`;
+      // 1. Try zenity (Ubuntu / GNOME default)
+      try {
+        const { stdout } = await execFileAsync('zenity', [
+          '--file-selection',
+          '--directory',
+          '--title=Open Workspace / Project',
+          `--filename=${dirArg}`,
+        ]);
+        const picked = stdout.trim();
+        return NextResponse.json({ selectedPath: picked || null });
+      } catch (err: any) {
+        if (err.code === 1) {
+          // User cancelled zenity dialog
+          return NextResponse.json({ selectedPath: null });
+        }
+      }
+
+      // 2. Try kdialog (KDE Plasma)
+      try {
+        const { stdout } = await execFileAsync('kdialog', [
+          '--getexistingdirectory',
+          startPath,
+          '--title',
+          'Open Workspace / Project',
+        ]);
+        const picked = stdout.trim();
+        return NextResponse.json({ selectedPath: picked || null });
+      } catch (err: any) {
+        if (err.code === 1) {
+          return NextResponse.json({ selectedPath: null });
+        }
+      }
+
+      // 3. Try yad
+      try {
+        const { stdout } = await execFileAsync('yad', [
+          '--file',
+          '--directory',
+          '--title=Open Workspace / Project',
+          `--filename=${dirArg}`,
+        ]);
+        const picked = stdout.trim();
+        return NextResponse.json({ selectedPath: picked || null });
+      } catch {}
+
+      return NextResponse.json(
+        { selectedPath: null, error: 'No native GUI dialog tool found (install zenity or kdialog).' },
+        { status: 404 }
+      );
+    }
+
+    if (process.platform === 'darwin') {
+      const escapedPath = startPath.replace(/"/g, '\\"');
+      const { stdout } = await execFileAsync('osascript', [
+        '-e',
+        `POSIX path of (choose folder with prompt "Select a project directory:" default location POSIX file "${escapedPath}")`,
+      ]);
+      const picked = stdout.trim();
+      return NextResponse.json({ selectedPath: picked || null });
+    }
+
+    return NextResponse.json({ selectedPath: null });
+  } catch (err: any) {
+    return NextResponse.json({ selectedPath: null, error: err.message });
   }
 }

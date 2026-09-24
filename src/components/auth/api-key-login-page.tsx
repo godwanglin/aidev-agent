@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   RefreshCw,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { AidevLogo } from '@/components/common/antigravity-logo';
 import type { AidevSettings } from '@/lib/storage';
@@ -29,6 +30,16 @@ export const ApiKeyLoginPage: React.FC<ApiKeyLoginPageProps> = ({ onLoginSuccess
   const [isOpeningJson, setIsOpeningJson] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoToast, setInfoToast] = useState<string | null>(null);
+
+  const handleOpenGetApiKey = () => {
+    const url = 'https://aidev.weebinhub.biz.id/keys';
+    const api = (window as any).electronAPI;
+    if (api?.openExternal) {
+      api.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const handlePaste = async () => {
     try {
@@ -182,15 +193,27 @@ export const ApiKeyLoginPage: React.FC<ApiKeyLoginPageProps> = ({ onLoginSuccess
                   <KeyRound className="w-3.5 h-3.5 text-[#60a5fa]" />
                   <span>API Key</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={handlePaste}
-                  className="inline-flex items-center gap-1 text-[11px] text-[#9ca3af] hover:text-white transition cursor-pointer"
-                  title="Tempel dari Clipboard"
-                >
-                  <ClipboardPaste className="w-3 h-3" />
-                  <span>Paste</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleOpenGetApiKey}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#60a5fa] hover:text-[#93c5fd] transition cursor-pointer"
+                    title="Buka Dashboard Aidev untuk mendapatkan API Key (https://aidev.weebinhub.biz.id/keys)"
+                  >
+                    <span>Get Api Key</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                  <span className="text-[#272935]">|</span>
+                  <button
+                    type="button"
+                    onClick={handlePaste}
+                    className="inline-flex items-center gap-1 text-[11px] text-[#9ca3af] hover:text-white transition cursor-pointer"
+                    title="Tempel dari Clipboard"
+                  >
+                    <ClipboardPaste className="w-3 h-3" />
+                    <span>Paste</span>
+                  </button>
+                </div>
               </div>
 
               <div className="relative">
@@ -247,6 +270,20 @@ export const ApiKeyLoginPage: React.FC<ApiKeyLoginPageProps> = ({ onLoginSuccess
                 </>
               )}
             </button>
+
+            <div className="flex items-center justify-center pt-1">
+              <button
+                type="button"
+                onClick={handleOpenGetApiKey}
+                className="inline-flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition cursor-pointer group"
+              >
+                <span>Belum punya API Key?</span>
+                <span className="font-semibold text-[#60a5fa] group-hover:text-[#93c5fd] underline underline-offset-4 inline-flex items-center gap-1">
+                  Get Api Key
+                  <ExternalLink className="w-3 h-3" />
+                </span>
+              </button>
+            </div>
           </form>
 
           {/* Security note */}

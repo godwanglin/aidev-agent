@@ -15,6 +15,7 @@ import { SelectionQuoteButton } from '@/components/common/selection-quote-button
 import { useTheme } from '@/context/theme-context';
 import { CompactionDivider } from './compaction-divider';
 import { TodoCard, type TodoItemData } from './todo-card';
+import { ChatTimelineMinimap, type TimelineTurnItem } from './chat-timeline-minimap';
 import type { MessageRecord, ProjectRecord, SessionCompactionRecord } from '@/lib/db';
 import type { GatewayModel } from '@/lib/gateway';
 
@@ -445,6 +446,29 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     return map;
   }, [compactions, turns]);
 
+  // Build Timeline Minimap items: strictly 1 item per chat turn (1 chat = 1 line)
+  const timelineItems = useMemo<TimelineTurnItem[]>(() => {
+    return turns.map((turn, idx) => {
+      const isLast = idx === turns.length - 1;
+      const userPrompt = (turn.userMessage?.content || '').replace(/\s+/g, ' ').trim() || `Chat #${idx + 1}`;
+      const assistantTexts = turn.segments
+        .filter((s) => s.type === 'assistant_text' && s.message?.content)
+        .map((s) => s.message!.content)
+        .filter(Boolean)
+        .join(' ');
+      const assistantPreview =
+        assistantTexts.trim() ||
+        (isLast && isStreaming && streamingContent ? streamingContent.trim() : '');
+
+      return {
+        id: turn.id,
+        turnId: turn.id,
+        userPrompt,
+        assistantPreview,
+      };
+    });
+  }, [turns, isStreaming, streamingContent]);
+
   // Auto-scroll to bottom smoothly when a compaction completes
   useEffect(() => {
     if (compactions && compactions.length > 0 && scrollRef.current) {
@@ -459,6 +483,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   return (
     <section className="flex-1 min-h-0 flex flex-col h-full bg-[#101010] overflow-hidden relative">
       <SelectionQuoteButton />
+      {turns.length > 0 && (
+        <ChatTimelineMinimap
+          turns={timelineItems}
+          scrollContainerRef={scrollRef}
+          sessionId={messages[0]?.session_id}
+        />
+      )}
       {/* Messages Canvas Scroll Area */}
       <div
         ref={scrollRef}
@@ -580,6 +611,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 return (
                   <div
                     key={turn.id}
+                    data-turn-id={turn.id}
                     className={`space-y-2 select-text ${turnIdx > 0 ? 'pt-7' : 'pt-1'}`}
                   >
                     {/* 1. User Message Card */}

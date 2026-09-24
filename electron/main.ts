@@ -347,6 +347,38 @@ function setupIpcHandlers(): void {
   ipcMain.on('window-reset-zoom', () => {
     mainWindow?.webContents.setZoomLevel(0);
   });
+
+  ipcMain.handle('open-directory-picker', async (_event, defaultPath?: string) => {
+    try {
+      let startPath = defaultPath && fs.existsSync(defaultPath) ? path.resolve(defaultPath) : undefined;
+      if (!startPath) {
+        if (process.platform === 'win32' && fs.existsSync('C:\\dev')) {
+          startPath = 'C:\\dev';
+        } else {
+          startPath = app.getPath('home');
+        }
+      }
+
+      const options: Electron.OpenDialogOptions = {
+        title: 'Open Workspace / Project',
+        defaultPath: startPath,
+        buttonLabel: 'Open Workspace',
+        properties: ['openDirectory', 'createDirectory'],
+      };
+
+      const result = mainWindow
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return null;
+      }
+      return result.filePaths[0];
+    } catch (err) {
+      console.error('Failed to open native directory picker:', err);
+      return null;
+    }
+  });
 }
 
 // Single instance lock (prevent multiple running desktop instances)

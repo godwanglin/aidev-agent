@@ -1245,12 +1245,17 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     }
   };
 
-  const handleStartNewConversation = () => {
+  const handleStartNewConversation = (targetProject?: ProjectRecord | null | any) => {
+    const nextProject: ProjectRecord | null =
+      targetProject && typeof targetProject === 'object' && 'id' in targetProject && 'workdir_path' in targetProject
+        ? (targetProject as ProjectRecord)
+        : null;
+
     if (isMobile) setIsSidebarCollapsed(true);
     loadedSessionIdRef.current = null;
     currentSessionRef.current = null;
-    currentProjectRef.current = null;
-    setCurrentProject(null);
+    currentProjectRef.current = nextProject;
+    setCurrentProject(nextProject);
     setCurrentSession(null);
     setMessages([]);
     setStreamingReasoning('');
@@ -1266,7 +1271,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     setIsRightPanelOpen(false);
     setWorkspaceMode('file');
     setTerminals([]);
-    syncUrl(null, null, splitSession?.id, splitDirection);
+    syncUrl(nextProject, null, splitSession?.id, splitDirection);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('aidev:focus-prompt'));
     }
@@ -1284,7 +1289,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       setIsDirectoryPickerOpen(true);
     };
     const onNewSession = () => {
-      handleStartNewConversation();
+      handleStartNewConversation(currentProjectRef.current);
     };
     const onToggleRightPanel = () => {
       setIsRightPanelOpen((prev) => !prev);
@@ -1309,8 +1314,10 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
   const handleNewSessionInProject = (projectId: string) => {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
+    currentProjectRef.current = proj;
     setCurrentProject(proj);
     loadedSessionIdRef.current = null;
+    currentSessionRef.current = null;
     setCurrentSession(null);
     setMessages([]);
     setStreamingReasoning('');
@@ -1328,6 +1335,9 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     setWorkspaceMode('file');
     setTerminals([]);
     syncUrl(proj, null, splitSession?.id, splitDirection);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('aidev:focus-prompt'));
+    }
   };
 
   // Requirement 7: Manual Rename
@@ -3749,6 +3759,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
   }, [messages]);
 
   const handleSelectProject = (project: ProjectRecord | null) => {
+    currentProjectRef.current = project;
     setCurrentProject(project);
     if (project) {
       if (typeof window !== 'undefined') {
@@ -3761,11 +3772,21 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
           setPermissionMode('AUTO');
         }
       }
+      if (!currentSession) {
+        syncUrl(project, null, splitSession?.id, splitDirection);
+        return;
+      }
       const projSessions = allSessions.filter((s) => s.project_id === project.id);
       if (projSessions.length > 0) {
         handleSelectSession(projSessions[0], project);
       } else {
-        handleStartNewConversation();
+        handleStartNewConversation(project);
+      }
+    } else {
+      if (!currentSession) {
+        syncUrl(null, null, splitSession?.id, splitDirection);
+      } else {
+        handleStartNewConversation(null);
       }
     }
   };
@@ -4439,8 +4460,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
             .then((d) => {
               if (d.project) {
                 setProjects((prev) => [d.project, ...prev.filter((p) => p.id !== d.project.id)]);
-                setCurrentProject(d.project);
-                handleStartNewConversation();
+                handleStartNewConversation(d.project);
               }
             });
           setIsDirectoryPickerOpen(false);
