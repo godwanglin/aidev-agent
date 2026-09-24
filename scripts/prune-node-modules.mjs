@@ -31,7 +31,58 @@ const DELETE_EXTENSIONS = [
   '.md',
   '.markdown',
   '.tsbuildinfo',
+  '.pdb',
+  '.ilk',
+  '.exp',
+  '.lib',
 ];
+
+// Directories/packages only needed during `next build` (already completed before this script runs)
+const HEAVY_BUILD_ONLY_PATHS = [
+  '@next/swc-win32-x64-msvc',
+  '@next/swc-win32-arm64-msvc',
+  '@next/swc-linux-x64-gnu',
+  '@next/swc-linux-x64-musl',
+  '@next/swc-darwin-x64',
+  '@next/swc-darwin-arm64',
+  'node-pty/prebuilds/win32-arm64',
+  'node-pty/prebuilds/darwin-arm64',
+  'node-pty/prebuilds/darwin-x64',
+  'node-pty/third_party',
+  'node-pty/deps',
+  'node-pty/src',
+  'lucide-react',
+  '@react-symbols',
+  '@img',
+  '@esbuild',
+  'esbuild',
+  'typescript',
+  'tailwindcss',
+  'postcss',
+  'autoprefixer',
+  'tsup',
+  '@rollup',
+  'next/dist/esm',
+  'next/dist/docs',
+  'next/dist/bundle-analyzer',
+  'next/dist/next-devtools',
+  'next/dist/compiled/react-dom-experimental',
+  'next/dist/compiled/next-devtools',
+  'next/dist/compiled/webpack',
+  'next/dist/compiled/babel',
+  'next/dist/compiled/babel-packages',
+];
+
+for (const rel of HEAVY_BUILD_ONLY_PATHS) {
+  const target = path.join(ROOT, rel);
+  if (fs.existsSync(target)) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+      deletedDirs++;
+      console.log(`[Prune] Removed build-only path: node_modules/${rel}`);
+    } catch {}
+  }
+}
 
 function pruneDir(dirPath) {
   let entries;
@@ -64,6 +115,7 @@ function pruneDir(dirPath) {
       }
 
       if (
+        lowerName.endsWith('.runtime.dev.js') ||
         lowerName.startsWith('readme') ||
         lowerName.startsWith('changelog') ||
         lowerName.startsWith('changes') ||
