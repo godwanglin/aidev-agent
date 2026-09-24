@@ -76,16 +76,34 @@ export function extractTurnChanges(steps: TurnStep[]): TurnChanges | null {
       let add = res?.additions ?? args?.additions ?? 0;
       let del = res?.deletions ?? args?.deletions ?? 0;
 
-      if (!add && !del && msg.tool_result) {
-        const addMatch = /\+(\d+)/.exec(msg.tool_result);
-        const delMatch = /-(\d+)/.exec(msg.tool_result);
-        if (addMatch) add = parseInt(addMatch[1], 10);
-        if (delMatch) del = parseInt(delMatch[1], 10);
+      // Extract accurate additions/deletions from tool_result text if not populated
+      if (!add && !del && typeof msg.tool_result === 'string') {
+        const addMatch = /(?:additions["':\s]+|\+)(\d+)/i.exec(msg.tool_result);
+        const delMatch = /(?:deletions["':\s]+|-)(\d+)/i.exec(msg.tool_result);
+        if (addMatch) add = parseInt(addMatch[1], 10) || 0;
+        if (delMatch) del = parseInt(delMatch[1], 10) || 0;
       }
 
+      // If still 0, calculate real line changes from patchText (apply_patch)
+      if (add === 0 && del === 0 && args?.patchText && typeof args.patchText === 'string') {
+        const patchLines = args.patchText.split('\n');
+        for (const line of patchLines) {
+          if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+            continue;
+          }
+          if (line.startsWith('+')) add++;
+          else if (line.startsWith('-')) del++;
+        }
+      }
+
+      // If write_file (new file or full content overwrite) without stats, count content lines
+      if (add === 0 && del === 0 && args?.content && typeof args.content === 'string') {
+        add = args.content.split('\n').length;
+      }
+
+      // Minimum 1 addition indicator if a file edit actually occurred
       if (add === 0 && del === 0) {
-        add = 2;
-        del = 2;
+        add = 1;
       }
 
       totalAdditions += add;

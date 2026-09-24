@@ -9,6 +9,8 @@ export const SelectionQuoteButton: React.FC = () => {
   const [selectedText, setSelectedText] = useState('');
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const isMouseDownRef = useRef(false);
+  const scrollTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -35,8 +37,6 @@ export const SelectionQuoteButton: React.FC = () => {
     setSelectedText('');
   };
 
-  const isMouseDownRef = useRef(false);
-
   useEffect(() => {
     const updateSelectionFromDom = () => {
       const sel = window.getSelection();
@@ -46,7 +46,7 @@ export const SelectionQuoteButton: React.FC = () => {
         return;
       }
 
-      // Do not mount or reposition floating button while user is actively dragging mouse to select text
+      // Do not mount or reposition floating button while user is actively dragging mouse
       if (isMouseDownRef.current) {
         return;
       }
@@ -60,9 +60,10 @@ export const SelectionQuoteButton: React.FC = () => {
 
       // Check if selection is inside an input, textarea, or contenteditable editor
       const anchorNode = sel.anchorNode;
-      const parentEl = anchorNode?.nodeType === Node.ELEMENT_NODE
-        ? (anchorNode as HTMLElement)
-        : anchorNode?.parentElement;
+      const parentEl =
+        anchorNode?.nodeType === Node.ELEMENT_NODE
+          ? (anchorNode as HTMLElement)
+          : anchorNode?.parentElement;
 
       if (
         parentEl?.closest('input') ||
@@ -78,6 +79,12 @@ export const SelectionQuoteButton: React.FC = () => {
         const range = sel.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) {
+          setCoords(null);
+          return;
+        }
+
+        // Check if selection is still within visible viewport
+        if (rect.bottom < 40 || rect.top > window.innerHeight - 40) {
           setCoords(null);
           return;
         }
@@ -103,9 +110,10 @@ export const SelectionQuoteButton: React.FC = () => {
 
     const handleMouseUp = () => {
       isMouseDownRef.current = false;
-      requestAnimationFrame(() => {
+      // Use small delay to allow browser to finalize native selection range
+      setTimeout(() => {
         updateSelectionFromDom();
-      });
+      }, 30);
     };
 
     const handleSelectionChange = () => {
@@ -141,8 +149,12 @@ export const SelectionQuoteButton: React.FC = () => {
       }
     };
 
+    // Debounce scroll listener so micro-scrolling doesn't abruptly kill the button
     const handleScroll = () => {
-      setCoords(null);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        updateSelectionFromDom();
+      }, 100);
     };
 
     document.addEventListener('mousedown', handleMouseDown, true);
@@ -152,6 +164,7 @@ export const SelectionQuoteButton: React.FC = () => {
     window.addEventListener('scroll', handleScroll, true);
 
     return () => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
       document.removeEventListener('mousedown', handleMouseDown, true);
       document.removeEventListener('mouseup', handleMouseUp, true);
       document.removeEventListener('selectionchange', handleSelectionChange);
@@ -166,9 +179,11 @@ export const SelectionQuoteButton: React.FC = () => {
     <button
       ref={buttonRef}
       type="button"
+      data-quote-button="true"
       onMouseDown={(e) => {
         // Prevent clearing selection before onClick fires
         e.preventDefault();
+        e.stopPropagation();
       }}
       onClick={() => handleQuote()}
       style={{

@@ -2,65 +2,67 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  Loader2,
+  Folder,
+  FileCode2,
+  FileText,
+  FileSearch,
+  ExternalLink,
+  ChevronRight,
+  Terminal,
+  Clock,
+  CheckCircle2,
+  XCircle,
   Copy,
   Check,
-  FileCode,
-  ChevronRight,
-  Globe,
+  RotateCcw,
+  Sparkles,
   Search,
-  FolderTree,
   ListTodo,
-  Stethoscope,
-  Compass,
-  ExternalLink,
+  Layers,
+  Code2,
+  ShieldCheck,
+  AlertTriangle,
+  Loader2,
+  Radio,
+  FileQuestion,
+  Info,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { TodoCard } from './todo-card';
-import { TerminalExecCard } from './terminal-exec-card';
-import { SearchResultsCard } from './search-results-card';
-import { QuestionDetailsCard } from './question-details-card';
 import { FormattedCodeCard } from './formatted-code-card';
-import { ImagePreviewModal } from '@/components/modals/image-preview-modal';
 import { AestheticFileIcon } from '@/components/common/aesthetic-file-icon';
+import { TodoCard } from './todo-card';
 
-interface ToolRowProps {
+export interface ToolRowProps {
   toolName: string;
   argumentsText?: string;
   resultText?: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING_PERMISSION';
+  status?: 'RUNNING' | 'COMPLETED' | 'FAILED';
   durationMs?: number;
   onOpenFileDiff?: (filePath: string) => void;
-  onOpenFile?: (filePath: string, lineRange?: { startLine?: number; endLine?: number }) => void;
+  onOpenFile?: (filePath: string) => void;
   onOpenBrowser?: (url: string) => void;
 }
 
-export const ToolRow: React.FC<ToolRowProps> = ({
+export function ToolRow({
   toolName,
-  argumentsText,
-  resultText,
-  status,
+  argumentsText = '',
+  resultText = '',
+  status = 'COMPLETED',
+  durationMs,
   onOpenFileDiff,
   onOpenFile,
   onOpenBrowser,
-}) => {
+}: ToolRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [selectedPreviewImage, setSelectedPreviewImage] = useState<{
-    url: string;
-    title?: string;
-    subtitle?: string;
-  } | null>(null);
 
+  // Safe parsing
   let parsedArgs: any = null;
+  let parsedResult: any = null;
   try {
     if (argumentsText) parsedArgs = JSON.parse(argumentsText);
   } catch {
     // raw string
   }
-
-  let parsedResult: any = null;
   try {
     if (resultText) parsedResult = JSON.parse(resultText);
   } catch {
@@ -193,8 +195,9 @@ export const ToolRow: React.FC<ToolRowProps> = ({
     toolName === 'find_references' ||
     toolName === 'ask_question';
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(resultText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -204,18 +207,32 @@ export const ToolRow: React.FC<ToolRowProps> = ({
     return <AestheticFileIcon filePath={path} className="w-3.5 h-3.5 shrink-0" />;
   };
 
-  // Estimate additions/deletions if available from result or args
-  let additions = parsedArgs?.additions || 0;
-  let deletions = parsedArgs?.deletions || 0;
+  // Estimate additions/deletions accurately from parsedResult, parsedArgs, or content
+  let additions = parsedResult?.additions ?? parsedArgs?.additions ?? 0;
+  let deletions = parsedResult?.deletions ?? parsedArgs?.deletions ?? 0;
+
   if (!additions && !deletions && resultText) {
-    const addMatch = /\+(\d+)/.exec(resultText);
-    const delMatch = /-(\d+)/.exec(resultText);
-    if (addMatch) additions = parseInt(addMatch[1], 10);
-    if (delMatch) deletions = parseInt(delMatch[1], 10);
+    const addMatch = /(?:additions["':\s]+|\+)(\d+)/i.exec(resultText);
+    const delMatch = /(?:deletions["':\s]+|-)(\d+)/i.exec(resultText);
+    if (addMatch) additions = parseInt(addMatch[1], 10) || 0;
+    if (delMatch) deletions = parseInt(delMatch[1], 10) || 0;
   }
+
+  if (isEdit && additions === 0 && deletions === 0 && parsedArgs?.patchText) {
+    const patchLines = String(parsedArgs.patchText).split('\n');
+    for (const line of patchLines) {
+      if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) continue;
+      if (line.startsWith('+')) additions++;
+      else if (line.startsWith('-')) deletions++;
+    }
+  }
+
+  if (isEdit && additions === 0 && deletions === 0 && parsedArgs?.content) {
+    additions = String(parsedArgs.content).split('\n').length;
+  }
+
   if (isEdit && additions === 0 && deletions === 0) {
-    additions = 2;
-    deletions = 2;
+    additions = 1;
   }
 
   // Count search results
@@ -258,71 +275,55 @@ export const ToolRow: React.FC<ToolRowProps> = ({
             <div className="flex items-center gap-2 text-xs py-0.5 text-[#58a6ff]">
               <ListTodo className="w-3.5 h-3.5" />
               <span>Updating tasks checklist...</span>
-              {status === 'RUNNING' && <Loader2 className="w-3 h-3 animate-spin" />}
             </div>
           )}
         </div>
       )}
 
-      {/* 0.2 Web Search Row */}
+      {/* 0.2 Web Search Line */}
       {toolName === 'web_search' && (
         <div className="flex items-center gap-2 py-0.5 text-xs">
-          <Search className="w-3.5 h-3.5 text-[#58a6ff] shrink-0" />
-          <span className="text-[#8c8c8c]">Searched web:</span>
-          <span className="text-white font-medium truncate max-w-[350px]">
-            &quot;{parsedArgs?.query || ''}&quot;
+          <span className="text-[#8c8c8c]">Searched web for</span>
+          <span className="text-[#58a6ff] font-medium truncate max-w-[400px]">
+            "{parsedArgs?.query || ''}"
           </span>
-          {parsedResult?.count !== undefined && (
-            <span className="px-1.5 py-0.2 rounded bg-white/[0.06] text-[10.5px] text-[#8c8c8c]">
-              {parsedResult.count} results
-            </span>
-          )}
           {status === 'RUNNING' && (
             <Loader2 className="w-3 h-3 text-[#007acc] animate-spin ml-1" />
           )}
         </div>
       )}
 
-      {/* 0.3 Read URL Row */}
+      {/* 0.3 Read URL Line */}
       {toolName === 'read_url' && (
         <div className="flex items-center gap-2 py-0.5 text-xs">
-          <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="text-[#8c8c8c]">Read web page:</span>
-          <span
-            onClick={() => onOpenBrowser?.(parsedArgs?.url || '')}
-            className="text-[#58a6ff] hover:underline cursor-pointer truncate max-w-[320px] font-mono text-[11px]"
-          >
+          <span className="text-[#8c8c8c]">Read web page</span>
+          <span className="text-[#58a6ff] font-mono truncate max-w-[400px]">
             {parsedArgs?.url || ''}
           </span>
-          {parsedResult?.contentLength && (
-            <span className="text-[10px] text-[#71717a]">
-              ({Math.round(parsedResult.contentLength / 1024)} KB)
-            </span>
-          )}
           {status === 'RUNNING' && (
             <Loader2 className="w-3 h-3 text-[#007acc] animate-spin ml-1" />
           )}
         </div>
       )}
 
-      {/* 0.4 Repo Map & Symbol Outline Row */}
-      {(toolName === 'get_repo_map' || toolName === 'get_file_symbols') && (
+      {/* 0.4 Codebase Tools (get_repo_map, get_file_symbols, etc.) */}
+      {(toolName === 'get_repo_map' ||
+        toolName === 'get_file_symbols' ||
+        toolName === 'get_diagnostics' ||
+        toolName === 'find_references') && (
         <div className="flex items-center gap-2 py-0.5 text-xs">
-          <FolderTree className="w-3.5 h-3.5 text-[#e3b341] shrink-0" />
           <span className="text-[#8c8c8c]">
-            {toolName === 'get_repo_map' ? 'Mapped codebase:' : 'Extracted symbols:'}
+            {toolName === 'get_repo_map'
+              ? 'Mapped repository architecture'
+              : toolName === 'get_file_symbols'
+              ? 'Inspected file symbols'
+              : toolName === 'get_diagnostics'
+              ? 'Checked code diagnostics'
+              : 'Found symbol references'}
           </span>
-          <span className="text-white font-medium truncate max-w-[280px]">
-            {parsedArgs?.directory || parsedArgs?.path || '.'}
-          </span>
-          {parsedResult?.totalSymbolsFound !== undefined && (
-            <span className="px-1.5 py-0.2 rounded bg-white/[0.06] text-[10.5px] text-[#8c8c8c]">
-              {parsedResult.totalSymbolsFound} symbols
-            </span>
-          )}
-          {parsedResult?.totalSymbols !== undefined && (
-            <span className="px-1.5 py-0.2 rounded bg-white/[0.06] text-[10.5px] text-[#8c8c8c]">
-              {parsedResult.totalSymbols} symbols
+          {parsedArgs?.path && (
+            <span className="text-[#cccccc] font-mono truncate max-w-[300px]">
+              {parsedArgs.path}
             </span>
           )}
           {status === 'RUNNING' && (
@@ -331,84 +332,76 @@ export const ToolRow: React.FC<ToolRowProps> = ({
         </div>
       )}
 
-      {/* 0.5 Diagnostics & Code Intelligence Row */}
-      {(toolName === 'get_diagnostics' || toolName === 'find_references') && (
-        <div className="flex items-center gap-2 py-0.5 text-xs">
-          {toolName === 'get_diagnostics' ? (
-            <Stethoscope className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-          ) : (
-            <Compass className="w-3.5 h-3.5 text-[#58a6ff] shrink-0" />
-          )}
-          <span className="text-[#8c8c8c]">
-            {toolName === 'get_diagnostics' ? 'Diagnostics:' : 'Found references:'}
-          </span>
-          <span className="text-white font-medium truncate max-w-[280px]">
-            {parsedArgs?.path || parsedArgs?.symbol || 'workspace'}
-          </span>
-          {parsedResult?.totalErrors !== undefined && (
-            <span
-              className={`px-1.5 py-0.2 rounded text-[10.5px] font-medium ${
-                parsedResult.totalErrors > 0
-                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              }`}
-            >
-              {parsedResult.totalErrors === 0
-                ? '0 errors'
-                : `${parsedResult.totalErrors} error(s)`}
-            </span>
-          )}
-          {parsedResult?.totalReferences !== undefined && (
-            <span className="px-1.5 py-0.2 rounded bg-white/[0.06] text-[10.5px] text-[#8c8c8c]">
-              {parsedResult.totalReferences} references
-            </span>
-          )}
-          {status === 'RUNNING' && (
-            <Loader2 className="w-3 h-3 text-[#007acc] animate-spin ml-1" />
-          )}
-        </div>
-      )}
-
-      {/* 1. Analyzed File Line */}
+      {/* 1. Analyzed File Line (read_file, view_file) */}
       {isAnalyze && (
-        <div
-          onClick={() => {
-            if (filePath && onOpenFile) {
-              onOpenFile(filePath, { startLine, endLine });
-            }
-          }}
-          className="flex items-center gap-1.5 py-0.5 hover:text-white transition cursor-pointer group"
-          title={`Click to open ${filePath.split(/[\\/]/).pop() || filePath} in editor`}
-        >
-          <span className="text-[#8c8c8c]">Analyzed</span>
-          {renderIcon(filePath)}
-          <span className="text-[#58a6ff] group-hover:underline font-medium">
-            {filePath.split(/[\\/]/).pop() || filePath}
-          </span>
-          {startLine && endLine && (
-            <span className="text-[#768390] font-normal">
-              #L{startLine}{startLine !== endLine ? `-${endLine}` : ''}
-            </span>
-          )}
-          {status === 'RUNNING' && (
-            <Loader2 className="w-3 h-3 text-[#007acc] animate-spin ml-1" />
-          )}
+        <div>
+          <div
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center justify-between py-0.5 hover:bg-white/[0.02] rounded px-1 -mx-1 transition cursor-pointer group select-none"
+          >
+            <div className="flex items-center gap-1.5 min-w-0 pr-2">
+              <span className="text-[#8c8c8c] shrink-0">Analyzed</span>
+              {renderIcon(filePath)}
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenFile?.(filePath);
+                }}
+                className="text-[#58a6ff] hover:underline font-medium truncate"
+                title={`Open ${filePath}`}
+              >
+                {filePath.split(/[\\/]/).pop() || filePath}
+              </span>
+              {endLine !== undefined && (
+                <span className="text-[#71717a] font-mono text-[11.5px] shrink-0">
+                  :{startLine || 1}-{endLine}
+                </span>
+              )}
+              {status === 'RUNNING' && (
+                <Loader2 className="w-3 h-3 text-[#007acc] animate-spin shrink-0 ml-1" />
+              )}
+            </div>
+            <ChevronRight
+              className={`w-3.5 h-3.5 text-[#666666] group-hover:text-[#aaaaaa] shrink-0 transition-transform duration-200 ${
+                isExpanded ? 'rotate-90 text-[#cccccc]' : ''
+              }`}
+            />
+          </div>
+
+          <div className={`accordion-grid ${isExpanded ? 'open' : ''}`}>
+            <div className="accordion-inner">
+              <FileContentCard
+                filePath={filePath}
+                startLine={startLine}
+                endLine={endLine}
+                content={resultText}
+                onOpenFile={onOpenFile}
+              />
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 2. Searched Line */}
+      {/* 2. Searched Pattern / Glob Line */}
       {isSearch && (
         <div>
           <div
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center justify-between py-0.5 hover:bg-white/[0.02] rounded px-1 -mx-1 transition cursor-pointer select-none group"
+            className="flex items-center justify-between py-0.5 hover:bg-white/[0.02] rounded px-1 -mx-1 transition cursor-pointer group select-none"
           >
             <div className="flex items-center gap-1.5 min-w-0 pr-2">
               <span className="text-[#8c8c8c] shrink-0">Searched</span>
-              <span className="text-[#cccccc] font-normal truncate max-w-[500px]">{query || 'files'}</span>
+              <span className="text-[#d4d4d4] font-mono text-[12.5px] truncate max-w-[340px]">
+                "{query}"
+              </span>
+              {filePath && (
+                <span className="text-[#71717a] font-mono text-[11.5px] truncate max-w-[200px]">
+                  in {filePath}
+                </span>
+              )}
               {searchCount !== null && (
-                <span className="px-1.5 py-0.5 rounded bg-[#202020] border border-[#2a2a2a] text-[#8c8c8c] text-[11px] font-mono leading-tight ml-0.5 shrink-0">
-                  {searchCount} {searchCount === 1 ? 'result' : 'results'}
+                <span className="text-[#71717a] font-mono text-[11px] shrink-0">
+                  ({searchCount} {searchCount === 1 ? 'result' : 'results'})
                 </span>
               )}
               {status === 'RUNNING' && (
@@ -514,17 +507,11 @@ export const ToolRow: React.FC<ToolRowProps> = ({
         <div>
           <div
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center justify-between py-0.5 hover:bg-white/[0.02] rounded px-1 -mx-1 transition cursor-pointer select-none group"
+            className="flex items-center justify-between py-0.5 hover:bg-white/[0.02] rounded px-1 -mx-1 transition cursor-pointer group select-none"
           >
-            <div className="flex items-center gap-1.5 min-w-0 pr-2">
-              <span className="text-[#8c8c8c] shrink-0">
-                {toolName.startsWith('mcp_') || toolName === 'call_mcp_tool' ? 'Ran MCP' : 'Executed'}
-              </span>
-              <span className="text-[#d4d4d4] font-mono truncate max-w-[500px]">
-                {toolName === 'call_mcp_tool'
-                  ? `${parsedArgs?.server_name || 'mcp'}/${parsedArgs?.tool_name || 'tool'}`
-                  : toolName}
-              </span>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[#8c8c8c]">Used</span>
+              <span className="text-white font-mono">{toolName}</span>
               {status === 'RUNNING' && (
                 <Loader2 className="w-3 h-3 text-[#007acc] animate-spin ml-1" />
               )}
@@ -536,192 +523,289 @@ export const ToolRow: React.FC<ToolRowProps> = ({
             />
           </div>
 
-          {/* Direct Screenshot / Image Chip Rendering */}
-          {mediaUrl && (
-            <div className="my-1.5 flex items-center gap-2 animate-fade-in select-none">
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedPreviewImage({
-                    url: mediaUrl,
-                    title: decodeURIComponent(mediaFilename || 'screenshot.png'),
-                    subtitle: 'Saved to artifacts',
-                  });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.stopPropagation();
-                    setSelectedPreviewImage({
-                      url: mediaUrl,
-                      title: decodeURIComponent(mediaFilename || 'screenshot.png'),
-                      subtitle: 'Saved to artifacts',
-                    });
-                  }
-                }}
-                className="inline-flex items-center gap-2 px-2.5 h-[26px] box-border rounded-[6px] bg-blue-500/12 hover:bg-blue-500/22 border border-blue-500/30 hover:border-blue-400/50 text-blue-300 hover:text-blue-100 text-[11.5px] font-sans select-none leading-none transition-all cursor-pointer shadow-xs group"
-                title="Click to view image details"
-              >
-                <img
-                  src={mediaUrl}
-                  alt={mediaFilename || 'Screenshot'}
-                  className="w-3.5 h-3.5 rounded-[2.5px] object-cover border border-blue-400/40 shrink-0 bg-black/40"
-                />
-                <span className="font-medium font-mono tracking-tight truncate max-w-[280px]">
-                  {decodeURIComponent(mediaFilename || 'screenshot.png')}
-                </span>
-                <span className="text-[9.5px] text-blue-300/90 font-mono px-1.5 py-0.5 rounded bg-blue-500/20 group-hover:bg-blue-500/35 transition-colors">
-                  View
-                </span>
-              </span>
-              <span className="text-[11px] text-emerald-400/80 font-mono select-none">
-                Saved to artifacts
-              </span>
+          <div className={`accordion-grid ${isExpanded ? 'open' : ''}`}>
+            <div className="accordion-inner pl-1">
+              <GenericToolResultCard
+                argumentsText={argumentsText}
+                resultText={resultText}
+                resultKind={resultKind}
+                mediaUrl={mediaUrl}
+                mediaFilename={mediaFilename}
+              />
             </div>
-          )}
-
-          {/* Expanded Details: Question Details Card */}
-          {toolName === 'ask_question' && (
-            <div className={`accordion-grid ${isExpanded ? 'open' : ''}`}>
-              <div className="accordion-inner">
-                <QuestionDetailsCard
-                  argumentsText={argumentsText}
-                  resultText={resultText}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Expanded Details Drawer for other tools */}
-          {toolName !== 'ask_question' && (
-            <div className={`accordion-grid ${isExpanded ? 'open' : ''}`}>
-              <div className="accordion-inner">
-                <div className="my-2 space-y-3 select-text">
-                  {argumentsText && (
-                    <FormattedCodeCard
-                      title="Tool arguments"
-                      code={argumentsText}
-                      defaultLanguage="json"
-                      maxHeight="max-h-72"
-                    />
-                  )}
-
-                  {resultText && resultKind !== 'empty' && resultKind !== 'media_only' && (
-                    <>
-                      {resultKind === 'json' || resultKind === 'diff' ? (
-                        <FormattedCodeCard
-                          title="Tool Output"
-                          code={resultText}
-                          defaultLanguage={resultKind === 'diff' ? 'diff' : 'json'}
-                          maxHeight="max-h-80"
-                        />
-                      ) : (
-                        <div className="rounded-lg border border-[#2a2a30] bg-[#16161a] overflow-hidden shadow-sm">
-                          <div className="flex items-center justify-between px-3 py-1.5 bg-[#1e1e24] border-b border-[#2a2a30] text-xs text-[#a0a0aa]">
-                            <span className="font-mono text-[11px] font-medium text-[#cccccc]">Tool Output</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(resultText);
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 2000);
-                              }}
-                              className="inline-flex items-center gap-1 text-[11px] hover:text-white transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/5"
-                              title="Copy output"
-                            >
-                              {copied ? (
-                                <>
-                                  <Check className="w-3 h-3 text-[#7ee787]" />
-                                  <span className="text-[#7ee787]">Copied</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3 text-[#8c8c8c]" />
-                                  <span>Copy</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          <div className="p-3 text-[12.5px] leading-relaxed text-[#cccccc] font-sans overflow-x-auto max-h-80 overflow-y-auto">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                a({ href, children }: any) {
-                                  return (
-                                    <a
-                                      href={href}
-                                      onClick={(e) => {
-                                        if (onOpenBrowser && href && /^https?:\/\//i.test(href)) {
-                                          e.preventDefault();
-                                          onOpenBrowser(href);
-                                        }
-                                      }}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[#58a6ff] hover:underline cursor-pointer font-medium"
-                                    >
-                                      {children}
-                                    </a>
-                                  );
-                                },
-                                code({ className, children, ...props }: any) {
-                                  const match = /language-(\w+)/.exec(className || '');
-                                  const isInline = !match && !String(children).includes('\n');
-                                  if (isInline) {
-                                    return (
-                                      <code className="px-1.5 py-0.5 rounded bg-[#222228] text-[#e2b340] font-mono text-[11px]" {...props}>
-                                        {children}
-                                      </code>
-                                    );
-                                  }
-                                  return (
-                                    <pre className="p-2.5 my-2 rounded bg-[#0d1117] border border-[#30363d] overflow-x-auto text-[11.5px] font-mono text-[#c9d1d9]">
-                                      <code>{children}</code>
-                                    </pre>
-                                  );
-                                },
-                                h1({ children }: any) {
-                                  return <h1 className="text-sm font-semibold text-white mt-2 mb-1">{children}</h1>;
-                                },
-                                h2({ children }: any) {
-                                  return <h2 className="text-xs font-semibold text-white mt-2 mb-1">{children}</h2>;
-                                },
-                                ul({ children }: any) {
-                                  return <ul className="list-disc pl-4 space-y-0.5 my-1 text-[#cccccc] text-[12px]">{children}</ul>;
-                                },
-                                ol({ children }: any) {
-                                  return <ol className="list-decimal pl-4 space-y-0.5 my-1 text-[#cccccc] text-[12px]">{children}</ol>;
-                                },
-                                p({ children }: any) {
-                                  return <p className="mb-1.5 last:mb-0 text-[#cccccc] text-[12.5px]">{children}</p>;
-                                },
-                              }}
-                            >
-                              {resultText}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
-      )}
-
-      {/* Modal Preview for tool screenshot */}
-      {selectedPreviewImage && (
-        <ImagePreviewModal
-          isOpen={Boolean(selectedPreviewImage)}
-          imageUrl={selectedPreviewImage.url}
-          title={selectedPreviewImage.title}
-          subtitle={selectedPreviewImage.subtitle}
-          onClose={() => setSelectedPreviewImage(null)}
-        />
       )}
     </div>
   );
-};
+}
+
+/**
+ * Aesthetic Card: File Read Content with Copy Button
+ */
+function FileContentCard({
+  filePath,
+  startLine,
+  endLine,
+  content,
+  onOpenFile,
+}: {
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  content: string;
+  onOpenFile?: (path: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const lineCount = content.split('\n').length;
+  const fileName = filePath.split(/[\\/]/).pop() || filePath;
+
+  return (
+    <div className="my-1.5 rounded-lg border border-[#27272a] bg-[#121214] overflow-hidden text-xs shadow-sm">
+      {/* Header Bar */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181b] border-b border-[#27272a]">
+        <div className="flex items-center gap-2 min-w-0">
+          <AestheticFileIcon filePath={filePath} className="w-3.5 h-3.5 shrink-0" />
+          <span
+            onClick={() => onOpenFile?.(filePath)}
+            className="text-[#e4e4e7] font-mono text-[11px] truncate cursor-pointer hover:underline"
+            title={`Open ${filePath}`}
+          >
+            {filePath}
+          </span>
+          {startLine && (
+            <span className="text-[#71717a] font-mono text-[10.5px]">
+              (lines {startLine}-{endLine || lineCount})
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[#a1a1aa] hover:text-white hover:bg-white/10 transition cursor-pointer"
+        >
+          {copied ? <Check className="w-3 h-3 text-[#4ade80]" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+
+      {/* Code Editor Body */}
+      <div className="p-2 overflow-x-auto max-h-[320px] scrollbar-thin scrollbar-thumb-zinc-700">
+        <FormattedCodeCard
+          code={content}
+          defaultLanguage={filePath.split('.').pop() || 'text'}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aesthetic Card: Search Results (Grep / Glob)
+ */
+function SearchResultsCard({
+  argumentsText,
+  resultText,
+  onOpenFile,
+}: {
+  argumentsText: string;
+  resultText: string;
+  onOpenFile?: (path: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(resultText);
+  } catch {}
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(resultText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isFileList = Array.isArray(parsed) && parsed.every((x) => typeof x === 'string');
+
+  return (
+    <div className="my-1.5 rounded-lg border border-[#27272a] bg-[#121214] overflow-hidden text-xs shadow-sm">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181b] border-b border-[#27272a]">
+        <div className="flex items-center gap-1.5 text-[#a1a1aa] font-mono text-[11px]">
+          <Search className="w-3 h-3 text-[#38bdf8]" />
+          <span>Search Output</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[#a1a1aa] hover:text-white hover:bg-white/10 transition cursor-pointer"
+        >
+          {copied ? <Check className="w-3 h-3 text-[#4ade80]" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+
+      <div className="p-2 max-h-[280px] overflow-y-auto font-mono text-[11.5px] leading-relaxed">
+        {isFileList ? (
+          <div className="space-y-1">
+            {parsed.map((file: string, idx: number) => (
+              <div
+                key={idx}
+                onClick={() => onOpenFile?.(file)}
+                className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-white/5 cursor-pointer text-[#38bdf8] hover:underline"
+              >
+                <AestheticFileIcon filePath={file} className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{file}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <pre className="text-[#d4d4d8] whitespace-pre-wrap">{resultText}</pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aesthetic Card: Terminal Execution (Command + Output)
+ */
+function TerminalExecCard({
+  command,
+  workdir,
+  output,
+  status,
+  onOpenBrowser,
+}: {
+  command: string;
+  workdir: string;
+  output: string;
+  status: string;
+  onOpenBrowser?: (url: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(output);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Detect localhost URLs in terminal output (e.g. Next.js, Vite dev server links)
+  const detectedUrls = useMemo(() => {
+    const urls: string[] = [];
+    const regex = /http:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):[0-9]+/g;
+    let match;
+    while ((match = regex.exec(output)) !== null) {
+      if (!urls.includes(match[0])) urls.push(match[0]);
+    }
+    return urls;
+  }, [output]);
+
+  return (
+    <div className="my-1.5 rounded-lg border border-[#27272a] bg-[#0c0c0e] overflow-hidden text-xs shadow-sm font-mono">
+      {/* Header: Command bar */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#141416] border-b border-[#27272a]">
+        <div className="flex items-center gap-2 min-w-0">
+          <Terminal className="w-3.5 h-3.5 text-[#4ade80] shrink-0" />
+          <span className="text-[#a1a1aa] text-[10.5px] truncate">
+            {workdir} $
+          </span>
+          <span className="text-white font-medium truncate">{command}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[#a1a1aa] hover:text-white hover:bg-white/10 transition cursor-pointer"
+        >
+          {copied ? <Check className="w-3 h-3 text-[#4ade80]" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+
+      {/* Dev server quick link badges */}
+      {detectedUrls.length > 0 && (
+        <div className="px-3 py-1 bg-[#1a1a24] border-b border-[#27272a] flex items-center gap-2">
+          <span className="text-[11px] text-[#818cf8]">Live Server:</span>
+          {detectedUrls.map((url) => (
+            <button
+              key={url}
+              type="button"
+              onClick={() => onOpenBrowser?.(url)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#4f46e5]/20 hover:bg-[#4f46e5]/40 text-[#a5b4fc] text-[11px] font-medium transition cursor-pointer"
+            >
+              <span>{url}</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Output Stream Box */}
+      <div className="p-2.5 max-h-[260px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 text-[11.5px] leading-relaxed text-[#a1a1aa]">
+        <pre className="whitespace-pre-wrap">{output}</pre>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Generic Fallback Tool Output Card
+ */
+function GenericToolResultCard({
+  argumentsText,
+  resultText,
+  resultKind,
+  mediaUrl,
+  mediaFilename,
+}: {
+  argumentsText: string;
+  resultText: string;
+  resultKind: string;
+  mediaUrl?: string;
+  mediaFilename?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(resultText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="my-1.5 rounded-lg border border-[#27272a] bg-[#121214] overflow-hidden text-xs shadow-sm">
+      <div className="flex items-center justify-between px-3 py-1 bg-[#18181b] border-b border-[#27272a]">
+        <span className="text-[#a1a1aa] font-mono text-[10.5px]">Result</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[#a1a1aa] hover:text-white hover:bg-white/10 transition cursor-pointer"
+        >
+          {copied ? <Check className="w-3 h-3 text-[#4ade80]" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+
+      <div className="p-2.5 max-h-[280px] overflow-y-auto">
+        {mediaUrl ? (
+          <div className="rounded border border-[#27272a] overflow-hidden max-w-sm">
+            <img src={mediaUrl} alt={mediaFilename || 'Capture'} className="w-full object-cover" />
+          </div>
+        ) : (
+          <pre className="font-mono text-[11.5px] text-[#d4d4d8] whitespace-pre-wrap">
+            {resultText}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}

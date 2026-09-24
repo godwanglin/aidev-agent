@@ -297,6 +297,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
+    // Never hijack or destroy active text selection if user highlighted text
+    const existingSelection = window.getSelection();
+    if (existingSelection && !existingSelection.isCollapsed && existingSelection.toString().trim().length > 0) {
+      return;
+    }
+
     editor.focus();
     setIsFocused(true);
 
@@ -341,54 +347,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => window.removeEventListener('aidev:focus-prompt', handleFocusEvent);
   }, [focusEditorSafely]);
 
-  // 4. Global pointerup listener: whenever user clicks outside on neutral elements, messages, background, etc.
-  // keep / return focus so the typing indicator NEVER stops blinking
+  // Explicitly unfocus and surrender caret when user starts selecting text in chat
   useEffect(() => {
-    const handleGlobalPointerUp = (e: PointerEvent) => {
-      if (!hasEverInteractedRef.current) return;
-      if (typeof window !== 'undefined' && window.innerWidth < 640) return;
-
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      // Don't interfere if user clicked inside another input, modal dialog, terminal, or code editor
-      if (
-        target.closest('input') ||
-        target.closest('textarea') ||
-        target.closest('[contenteditable="true"]') ||
-        target.closest('[role="dialog"]') ||
-        target.closest('.xterm') ||
-        target.closest('.monaco-editor')
-      ) {
-        return;
-      }
-
-      // Don't interfere if user selected text to copy
+    const handleSelectionChange = () => {
       const sel = window.getSelection();
-      if (sel && sel.toString().trim().length > 0) {
-        return;
+      if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+        // User is selecting text: immediately unfocus editor to prevent caret interference
+        setIsFocused(false);
       }
-
-      // Re-focus and restore caret so typing cursor is always active and blinking
-      setTimeout(() => {
-        const active = document.activeElement;
-        if (
-          !active ||
-          active === document.body ||
-          active === document.documentElement ||
-          (!['INPUT', 'TEXTAREA'].includes(active.tagName) &&
-            !active.closest('[role="dialog"]') &&
-            !active.closest('.xterm') &&
-            !active.closest('.monaco-editor'))
-        ) {
-          focusEditorSafely();
-        }
-      }, 15);
     };
 
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
-  }, [focusEditorSafely]);
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, []);
+
+  
 
   // 5. Global keystroke auto-focus: if user starts typing while focused on neutral background, redirect focus into prompt
   useEffect(() => {
@@ -1823,51 +1796,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 hasEverInteractedRef.current = true;
                 setIsFocused(true);
               }}
-              onBlur={(e) => {
-                const relatedTarget = e.relatedTarget as HTMLElement | null;
-                // If focus moved to another input, textarea, modal dialog, terminal, or code editor: allow blur!
-                if (
-                  relatedTarget &&
-                  (relatedTarget.tagName === 'INPUT' ||
-                    relatedTarget.tagName === 'TEXTAREA' ||
-                    relatedTarget.getAttribute('contenteditable') === 'true' ||
-                    relatedTarget.closest('[role="dialog"]') ||
-                    relatedTarget.closest('.xterm') ||
-                    relatedTarget.closest('.monaco-editor'))
-                ) {
-                  setIsFocused(false);
-                  return;
-                }
-
-                // If user has already interacted with input and is on desktop, keep focus and blinking cursor!
-                if (
-                  hasEverInteractedRef.current &&
-                  typeof window !== 'undefined' &&
-                  window.innerWidth >= 640
-                ) {
-                  const sel = window.getSelection();
-                  if (sel && sel.toString().trim().length > 0) {
-                    setIsFocused(false);
-                    return;
-                  }
-
-                  requestAnimationFrame(() => {
-                    const active = document.activeElement;
-                    if (
-                      !active ||
-                      active === document.body ||
-                      active === document.documentElement ||
-                      (!['INPUT', 'TEXTAREA'].includes(active.tagName) &&
-                        !active.closest('[role="dialog"]') &&
-                        !active.closest('.xterm') &&
-                        !active.closest('.monaco-editor'))
-                    ) {
-                      focusEditorSafely();
-                    }
-                  });
-                  return;
-                }
-
+              onBlur={() => {
                 setIsFocused(false);
                 const editor = editorRef.current;
                 if (editor) {
