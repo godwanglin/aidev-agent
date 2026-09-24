@@ -26,8 +26,8 @@ export interface AidevSettings {
 }
 
 export const DEFAULT_SETTINGS: AidevSettings = {
-  gatewayUrl: process.env.AIDEV_GATEWAY_URL || 'http://localhost:3000/v1',
-  apiKey: process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444',
+  gatewayUrl: process.env.AIDEV_GATEWAY_URL || 'https://aidev.weebinhub.biz.id/v1',
+  apiKey: process.env.AIDEV_GATEWAY_KEY || '',
   defaultModel: 'gemini-3.8-flash-high',
   permissionMode: 'AUTO',
   theme: 'dark',
@@ -182,10 +182,21 @@ export function loadSettings(): AidevSettings {
     const raw = fs.readFileSync(settingsFile, 'utf-8');
     const parsed = JSON.parse(raw);
     const settings: AidevSettings = { ...DEFAULT_SETTINGS, ...parsed };
-    if (!settings.apiKey || settings.gatewayUrl.includes('9rt.topupin.store')) {
+    let needsMigrationWrite = false;
+
+    if (
+      !settings.gatewayUrl ||
+      settings.gatewayUrl === 'http://localhost:3000/v1' ||
+      settings.gatewayUrl.includes('9rt.topupin.store')
+    ) {
       settings.gatewayUrl = DEFAULT_SETTINGS.gatewayUrl;
-      settings.apiKey = DEFAULT_SETTINGS.apiKey;
-      settings.defaultModel = DEFAULT_SETTINGS.defaultModel;
+      needsMigrationWrite = true;
+    }
+
+    if (needsMigrationWrite) {
+      try {
+        fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
+      } catch {}
     }
     if (settings.permissionPreset) {
       if (settings.permissionPreset === 'ask') settings.permissionMode = 'ASK';

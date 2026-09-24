@@ -58,6 +58,7 @@ interface MultiTabWorkspaceProps {
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewTerminalTab: () => void;
+  onOpenTerminal?: (terminalId: string) => void;
   onRevertFile?: (snapshotId: string, filePath: string) => void;
   onSendMessage?: (content: string) => void;
   onOpenFile?: (filePath: string, lineRange?: { startLine?: number; endLine?: number }) => void;
@@ -96,6 +97,7 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
   onSelectTab,
   onCloseTab,
   onNewTerminalTab,
+  onOpenTerminal,
   onRevertFile,
   onSendMessage,
   onOpenFile,
@@ -157,6 +159,26 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
   // Filter file, task, browser, and terminal tabs
   const fileTabs = tabs.filter((t) => t.type === 'file' || t.type === 'diff' || t.type === 'task' || t.type === 'browser' || t.type === 'terminal');
   const activeFileTab = fileTabs.find((t) => t.id === activeTabId) || fileTabs[0] || null;
+
+  // Keep selectedTerminalId synced when user switches between terminal tabs in the header bar
+  React.useEffect(() => {
+    if (activeFileTab?.type === 'terminal' && activeFileTab.terminalId) {
+      setSelectedTerminalId(activeFileTab.terminalId);
+    }
+  }, [activeFileTab?.id, activeFileTab?.terminalId]);
+
+  const handleActivateTerminalSession = (id: string) => {
+    setSelectedTerminalId(id);
+    const matchingTab = fileTabs.find((t) => t.type === 'terminal' && t.terminalId === id);
+    if (matchingTab) {
+      onSelectTab(matchingTab.id);
+      handleSelectMode('file');
+    } else if (onOpenTerminal) {
+      onOpenTerminal(id);
+    } else {
+      handleSelectMode('terminal');
+    }
+  };
 
   // Handle switching view mode
   const handleSelectMode = (mode: WorkspaceMode) => {
@@ -270,12 +292,14 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
             onDeleteAllTerminals={handleDeleteAllTerminals}
             onSwitchToReview={() => handleSelectMode('review')}
             onSwitchToTerminal={(termId) => {
-              if (termId) setSelectedTerminalId(termId);
-              handleSelectMode('terminal');
+              if (termId) {
+                handleActivateTerminalSession(termId);
+              } else {
+                handleSelectMode('terminal');
+              }
             }}
             onSelectTerminal={(termId) => {
-              setSelectedTerminalId(termId);
-              handleSelectMode('terminal');
+              handleActivateTerminalSession(termId);
             }}
             onNewTerminal={onNewTerminalTab}
             onOpenFile={handleOpenArtifactOrFile}
@@ -307,14 +331,7 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
             terminals={terminals.length > 0 ? terminals : [{ id: 'default', workdir }]}
             activeTerminalId={selectedTerminalId || (terminals[0]?.id ?? 'default')}
             workdir={workdir}
-            onSelectTerminal={(id) => {
-              setSelectedTerminalId(id);
-              const matchingTab = fileTabs.find((t) => t.type === 'terminal' && t.terminalId === id);
-              if (matchingTab) {
-                onSelectTab(matchingTab.id);
-                handleSelectMode('file');
-              }
-            }}
+            onSelectTerminal={handleActivateTerminalSession}
             onNewTerminal={onNewTerminalTab}
             onDeleteTerminal={handleDeleteTerminal}
           />
@@ -325,13 +342,9 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
             activeFileTab.type === 'terminal' ? (
               <TerminalView
                 terminals={terminals.length > 0 ? terminals : [{ id: activeFileTab.terminalId || 'default', workdir }]}
-                activeTerminalId={activeFileTab.terminalId || selectedTerminalId || (terminals[0]?.id ?? 'default')}
+                activeTerminalId={selectedTerminalId || activeFileTab.terminalId || (terminals[0]?.id ?? 'default')}
                 workdir={workdir}
-                onSelectTerminal={(id) => {
-                  setSelectedTerminalId(id);
-                  const matchingTab = fileTabs.find((t) => t.type === 'terminal' && t.terminalId === id);
-                  if (matchingTab) onSelectTab(matchingTab.id);
-                }}
+                onSelectTerminal={handleActivateTerminalSession}
                 onNewTerminal={onNewTerminalTab}
                 onDeleteTerminal={handleDeleteTerminal}
               />
@@ -413,12 +426,14 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
               onDeleteAllTerminals={handleDeleteAllTerminals}
               onSwitchToReview={() => handleSelectMode('review')}
               onSwitchToTerminal={(termId) => {
-                if (termId) setSelectedTerminalId(termId);
-                handleSelectMode('terminal');
+                if (termId) {
+                  handleActivateTerminalSession(termId);
+                } else {
+                  handleSelectMode('terminal');
+                }
               }}
               onSelectTerminal={(termId) => {
-                setSelectedTerminalId(termId);
-                handleSelectMode('terminal');
+                handleActivateTerminalSession(termId);
               }}
               onNewTerminal={onNewTerminalTab}
               onOpenFile={handleOpenArtifactOrFile}

@@ -161,7 +161,7 @@ function parseByokInfo(gatewayUrlStr: string): { host: string; providerName: str
 export async function getUserUsage(): Promise<UserUsageData | null> {
   const settings = loadSettings();
   const rawKey = settings.apiKey || process.env.AIDEV_GATEWAY_KEY || '';
-  const gatewayUrl = settings.gatewayUrl || 'http://localhost:3000/v1';
+  const gatewayUrl = settings.gatewayUrl || 'https://aidev.weebinhub.biz.id/v1';
 
   // 1. Attempt to fetch live usage from Aidev Gateway
   try {

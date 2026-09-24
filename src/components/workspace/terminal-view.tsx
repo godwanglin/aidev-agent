@@ -90,9 +90,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
       {/* 2. Main Terminal Content Area & Slide-over Active Terminals Sidebar */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Terminal xterm body */}
-        <div className="flex-1 h-full overflow-hidden bg-[#101010]">
-          <TerminalTab terminalId={activeTerminal.id} workdir={workdir} />
+        {/* Terminal xterm body (keep all active sessions mounted to preserve buffer on switch) */}
+        <div className="flex-1 h-full overflow-hidden bg-[#101010] relative">
+          {(terminals.length > 0 ? terminals : [activeTerminal]).map((t) => {
+            const isCurrent = t.id === activeTerminal.id;
+            return (
+              <div
+                key={t.id}
+                className={isCurrent ? 'w-full h-full flex flex-col' : 'hidden'}
+              >
+                <TerminalTab terminalId={t.id} workdir={t.workdir || workdir} />
+              </div>
+            );
+          })}
         </div>
 
         {/* Active Terminals Sidebar (Opened by the 3 lines button) */}

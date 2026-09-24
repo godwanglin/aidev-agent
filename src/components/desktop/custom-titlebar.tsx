@@ -93,6 +93,7 @@ const SHORTCUT_CATEGORIES: { category: string; items: ShortcutItem[] }[] = [
 export function CustomTitlebar() {
   const [isElectron, setIsElectron] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' });
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuType>(null);
@@ -101,6 +102,24 @@ export function CustomTitlebar() {
   const [shortcutSearch, setShortcutSearch] = useState('');
 
   const menuBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => r.json())
+      .then((d) => {
+        setIsLoggedIn(Boolean(d?.settings?.apiKey && d.settings.apiKey.trim().length > 0));
+      })
+      .catch(() => {});
+
+    const handleConfigUpdated = (e: any) => {
+      const key = e?.detail?.apiKey;
+      setIsLoggedIn(Boolean(key && String(key).trim().length > 0));
+      setActiveMenu(null);
+    };
+
+    window.addEventListener('aidev:config-updated', handleConfigUpdated);
+    return () => window.removeEventListener('aidev:config-updated', handleConfigUpdated);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).electronAPI?.isElectron) {
@@ -349,315 +368,326 @@ export function CustomTitlebar() {
           className="flex items-center gap-1 relative h-full"
           style={{ WebkitAppRegion: 'no-drag' } as any}
         >
-          {/* 1. Toggle Sidebar Icon (PanelLeft) */}
-          <button
-            type="button"
-            onClick={handleToggleSidebar}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-white hover:bg-white/[0.08] transition cursor-pointer"
-            title="Toggle Primary Sidebar (Ctrl+B)"
+          {isLoggedIn && (
+            <>
+              {/* 1. Toggle Sidebar Icon (PanelLeft) */}
+              <button
+                type="button"
+                onClick={handleToggleSidebar}
+                className="w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-white hover:bg-white/[0.08] transition cursor-pointer"
+                title="Toggle Primary Sidebar (Ctrl+B)"
+              >
+                <PanelLeft className="w-3.5 h-3.5" />
+              </button>
+
+              {/* 2. Navigation History (Back / Forward) */}
+              <div className="flex items-center gap-0.5 ml-0.5">
+                <button
+                  type="button"
+                  onClick={handleHistoryBack}
+                  className="w-6 h-6 flex items-center justify-center rounded text-[#6b7280] hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
+                  title="Go Back (Alt+Left)"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleHistoryForward}
+                  className="w-6 h-6 flex items-center justify-center rounded text-[#6b7280] hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
+                  title="Go Forward (Alt+Right)"
+                >
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* 3. Menus: File, Edit, View, Terminal (when logged in) + Help (always visible) */}
+          <div
+            className={`flex items-center gap-0.5 ${isLoggedIn ? 'ml-2' : 'ml-1'} font-normal text-[12px] text-[#d4d4d8]`}
+            style={{ WebkitAppRegion: 'no-drag' } as any}
           >
-            <PanelLeft className="w-3.5 h-3.5" />
-          </button>
-
-          {/* 2. Navigation History (Back / Forward) */}
-          <div className="flex items-center gap-0.5 ml-0.5">
-            <button
-              type="button"
-              onClick={handleHistoryBack}
-              className="w-6 h-6 flex items-center justify-center rounded text-[#6b7280] hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
-              title="Go Back (Alt+Left)"
-            >
-              <ArrowLeft className="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              onClick={handleHistoryForward}
-              className="w-6 h-6 flex items-center justify-center rounded text-[#6b7280] hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
-              title="Go Forward (Alt+Right)"
-            >
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* 3. Menus: File, Edit, View, Terminal, Help */}
-          <div className="flex items-center gap-0.5 ml-2 font-normal text-[12px] text-[#d4d4d8]" style={{ WebkitAppRegion: 'no-drag' } as any}>
-            {/* File Menu */}
-            <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
-              <button
-                type="button"
-                onClick={() => setActiveMenu(activeMenu === 'file' ? null : 'file')}
-                onMouseEnter={() => activeMenu && setActiveMenu('file')}
-                className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
-                  activeMenu === 'file' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
-                }`}
-              >
-                File
-              </button>
-              {activeMenu === 'file' && (
-                <div
-                  style={{ WebkitAppRegion: 'no-drag' } as any}
-                  className="absolute left-0 top-full mt-1 w-56 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
-                >
+            {isLoggedIn && (
+              <>
+                {/* File Menu */}
+                <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
                   <button
-                    onClick={() => dispatchAction('new-session')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                    type="button"
+                    onClick={() => setActiveMenu(activeMenu === 'file' ? null : 'file')}
+                    onMouseEnter={() => activeMenu && setActiveMenu('file')}
+                    className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
+                      activeMenu === 'file' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
+                    }`}
                   >
-                    <span>New Session</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+N</span>
+                    File
                   </button>
-                  <button
-                    onClick={() => dispatchAction('open-folder')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Open Project Folder...</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+O</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('open-settings')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Settings</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+,</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('exit')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#ef4444]/20 hover:text-red-400 transition text-left cursor-pointer"
-                  >
-                    <span>Exit Aidev</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Alt+F4</span>
-                  </button>
+                  {activeMenu === 'file' && (
+                    <div
+                      style={{ WebkitAppRegion: 'no-drag' } as any}
+                      className="absolute left-0 top-full mt-1 w-56 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <button
+                        onClick={() => dispatchAction('new-session')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>New Session</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+N</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('open-folder')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Open Project Folder...</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+O</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('open-settings')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Settings</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+,</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('exit')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#ef4444]/20 hover:text-red-400 transition text-left cursor-pointer"
+                      >
+                        <span>Exit Aidev</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Alt+F4</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Edit Menu */}
-            <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
-              <button
-                type="button"
-                onClick={() => setActiveMenu(activeMenu === 'edit' ? null : 'edit')}
-                onMouseEnter={() => activeMenu && setActiveMenu('edit')}
-                className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
-                  activeMenu === 'edit' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
-                }`}
-              >
-                Edit
-              </button>
-              {activeMenu === 'edit' && (
-                <div
-                  style={{ WebkitAppRegion: 'no-drag' } as any}
-                  className="absolute left-0 top-full mt-1 w-48 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
-                >
+                {/* Edit Menu */}
+                <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
                   <button
-                    onClick={() => dispatchAction('undo')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                    type="button"
+                    onClick={() => setActiveMenu(activeMenu === 'edit' ? null : 'edit')}
+                    onMouseEnter={() => activeMenu && setActiveMenu('edit')}
+                    className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
+                      activeMenu === 'edit' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
+                    }`}
                   >
-                    <span>Undo</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Z</span>
+                    Edit
                   </button>
-                  <button
-                    onClick={() => dispatchAction('redo')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Redo</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Y</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('cut')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Cut</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+X</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('copy')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Copy</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+C</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('paste')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Paste</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+V</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('select-all')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Select All</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+A</span>
-                  </button>
+                  {activeMenu === 'edit' && (
+                    <div
+                      style={{ WebkitAppRegion: 'no-drag' } as any}
+                      className="absolute left-0 top-full mt-1 w-48 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <button
+                        onClick={() => dispatchAction('undo')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Undo</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Z</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('redo')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Redo</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Y</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('cut')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Cut</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+X</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('copy')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Copy</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+C</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('paste')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Paste</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+V</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('select-all')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Select All</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+A</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* View Menu */}
-            <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
-              <button
-                type="button"
-                onClick={() => setActiveMenu(activeMenu === 'view' ? null : 'view')}
-                onMouseEnter={() => activeMenu && setActiveMenu('view')}
-                className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
-                  activeMenu === 'view' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
-                }`}
-              >
-                View
-              </button>
-              {activeMenu === 'view' && (
-                <div
-                  style={{ WebkitAppRegion: 'no-drag' } as any}
-                  className="absolute left-0 top-full mt-1 w-64 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
-                >
+                {/* View Menu */}
+                <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
                   <button
-                    onClick={() => dispatchAction('command-palette')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                    type="button"
+                    onClick={() => setActiveMenu(activeMenu === 'view' ? null : 'view')}
+                    onMouseEnter={() => activeMenu && setActiveMenu('view')}
+                    className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
+                      activeMenu === 'view' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
+                    }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <Code2 className="w-3.5 h-3.5 text-[#58a6ff]" />
-                      <span>Command Palette...</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+P</span>
+                    View
                   </button>
-                  <button
-                    onClick={() => dispatchAction('quick-open')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Search className="w-3.5 h-3.5 text-[#58a6ff]" />
-                      <span>Quick Open File...</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+P</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('grep-search')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Search className="w-3.5 h-3.5 text-[#a855f7]" />
-                      <span>Search across Files...</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+F</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('toggle-sidebar')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <PanelLeft className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Toggle Primary Sidebar</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+B</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('toggle-auxiliary')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <PanelRight className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Toggle Workspace Panel</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+B</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('toggle-terminal')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Terminal className="w-3.5 h-3.5 text-[#10b981]" />
-                      <span>Toggle Terminal</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+`</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('zoom-in')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <ZoomIn className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Zoom In</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+=</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('zoom-out')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <ZoomOut className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Zoom Out</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+-</span>
-                  </button>
-                  <button
-                    onClick={() => dispatchAction('reset-zoom')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <RotateCcw className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Reset Zoom</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+0</span>
-                  </button>
-                  <div className="h-px bg-white/[0.08] my-1" />
-                  <button
-                    onClick={() => dispatchAction('toggle-fullscreen')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Maximize2 className="w-3.5 h-3.5 text-[#9ca3af]" />
-                      <span>Toggle Fullscreen</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">F11</span>
-                  </button>
+                  {activeMenu === 'view' && (
+                    <div
+                      style={{ WebkitAppRegion: 'no-drag' } as any}
+                      className="absolute left-0 top-full mt-1 w-64 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <button
+                        onClick={() => dispatchAction('command-palette')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Code2 className="w-3.5 h-3.5 text-[#58a6ff]" />
+                          <span>Command Palette...</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+P</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('quick-open')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Search className="w-3.5 h-3.5 text-[#58a6ff]" />
+                          <span>Quick Open File...</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+P</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('grep-search')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Search className="w-3.5 h-3.5 text-[#a855f7]" />
+                          <span>Search across Files...</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+F</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('toggle-sidebar')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <PanelLeft className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Toggle Primary Sidebar</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+B</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('toggle-auxiliary')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <PanelRight className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Toggle Workspace Panel</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+B</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('toggle-terminal')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Terminal className="w-3.5 h-3.5 text-[#10b981]" />
+                          <span>Toggle Terminal</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+`</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('zoom-in')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ZoomIn className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Zoom In</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+=</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('zoom-out')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ZoomOut className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Zoom Out</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+-</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('reset-zoom')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <RotateCcw className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Reset Zoom</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+0</span>
+                      </button>
+                      <div className="h-px bg-white/[0.08] my-1" />
+                      <button
+                        onClick={() => dispatchAction('toggle-fullscreen')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Maximize2 className="w-3.5 h-3.5 text-[#9ca3af]" />
+                          <span>Toggle Fullscreen</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">F11</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Terminal Menu */}
-            <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
-              <button
-                type="button"
-                onClick={() => setActiveMenu(activeMenu === 'terminal' ? null : 'terminal')}
-                onMouseEnter={() => activeMenu && setActiveMenu('terminal')}
-                className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
-                  activeMenu === 'terminal' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
-                }`}
-              >
-                Terminal
-              </button>
-              {activeMenu === 'terminal' && (
-                <div
-                  style={{ WebkitAppRegion: 'no-drag' } as any}
-                  className="absolute left-0 top-full mt-1 w-56 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
-                >
+                {/* Terminal Menu */}
+                <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
                   <button
-                    onClick={() => dispatchAction('new-terminal')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                    type="button"
+                    onClick={() => setActiveMenu(activeMenu === 'terminal' ? null : 'terminal')}
+                    onMouseEnter={() => activeMenu && setActiveMenu('terminal')}
+                    className={`px-2 py-1 rounded text-[11.5px] transition cursor-pointer ${
+                      activeMenu === 'terminal' ? 'bg-white/[0.12] text-white' : 'hover:bg-white/[0.06] hover:text-white'
+                    }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <Terminal className="w-3.5 h-3.5 text-[#10b981]" />
-                      <span>New Terminal</span>
-                    </span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+`</span>
+                    Terminal
                   </button>
-                  <button
-                    onClick={() => dispatchAction('toggle-terminal')}
-                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
-                  >
-                    <span>Toggle Terminal Panel</span>
-                    <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+`</span>
-                  </button>
+                  {activeMenu === 'terminal' && (
+                    <div
+                      style={{ WebkitAppRegion: 'no-drag' } as any}
+                      className="absolute left-0 top-full mt-1 w-56 bg-[#1a1b23] border border-[#2e303d] rounded-lg shadow-2xl py-1 z-[100000] text-xs text-[#d1d5db] animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <button
+                        onClick={() => dispatchAction('new-terminal')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Terminal className="w-3.5 h-3.5 text-[#10b981]" />
+                          <span>New Terminal</span>
+                        </span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+Shift+`</span>
+                      </button>
+                      <button
+                        onClick={() => dispatchAction('toggle-terminal')}
+                        className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-[#3b82f6]/20 hover:text-white transition text-left cursor-pointer"
+                      >
+                        <span>Toggle Terminal Panel</span>
+                        <span className="text-[10px] text-[#6b7280] font-mono">Ctrl+`</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Help Menu */}
             <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
@@ -774,16 +804,18 @@ export function CustomTitlebar() {
           )}
         </div>
 
-        {/* Right Section: Workspace Panel Toggle + Window Controls (Minimize, Maximize/Restore, Close) */}
+        {/* Right Section: Workspace Panel Toggle (when logged in) + Window Controls (Minimize, Maximize/Restore, Close) */}
         <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: 'no-drag' } as any}>
-          <button
-            type="button"
-            onClick={() => dispatchAction('toggle-auxiliary')}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-white hover:bg-white/[0.08] transition cursor-pointer mr-1"
-            title="Toggle Workspace Panel (Ctrl+Shift+B)"
-          >
-            <PanelRight className="w-3.5 h-3.5" />
-          </button>
+          {isLoggedIn && (
+            <button
+              type="button"
+              onClick={() => dispatchAction('toggle-auxiliary')}
+              className="w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-white hover:bg-white/[0.08] transition cursor-pointer mr-1"
+              title="Toggle Workspace Panel (Ctrl+Shift+B)"
+            >
+              <PanelRight className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => api?.minimize?.()}
             className="w-10 h-7 flex items-center justify-center text-[#8e8e93] hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
@@ -914,7 +946,7 @@ export function CustomTitlebar() {
             <div>
               <h3 className="text-base font-semibold text-white">Aidev Desktop</h3>
               <p className="text-xs text-[#a1a1aa] mt-0.5">Autonomous Local AI Coding Agent</p>
-              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.4</p>
+              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.5</p>
             </div>
             {updateStatus.status === 'checking' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-[11px] text-[#a1a1aa]">
@@ -925,7 +957,7 @@ export function CustomTitlebar() {
             {updateStatus.status === 'not-available' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/25 text-[11px] text-[#4ade80]">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Sudah menggunakan versi terbaru (v1.0.4)</span>
+                <span>Sudah menggunakan versi terbaru (v1.0.5)</span>
               </div>
             )}
             <p className="text-xs text-[#d4d4d8] leading-relaxed">

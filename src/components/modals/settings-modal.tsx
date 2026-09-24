@@ -418,8 +418,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [language, setLanguage] = useState('en-US');
 
   // AI & Models
-  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:3000/v1');
-  const [apiKey, setApiKey] = useState('sk-aidev-default-gateway-key');
+  const [gatewayUrl, setGatewayUrl] = useState('https://aidev.weebinhub.biz.id/v1');
+  const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [defaultModel, setDefaultModel] = useState('gemini-3.8-flash-high');
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
@@ -1342,7 +1342,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = async () => {
     const updatedPayload = {
-      gatewayUrl,
       apiKey,
       defaultModel,
       theme,
@@ -1357,11 +1356,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     try {
       // 1. Save settings to /api/config
-      await fetch('/api/config', {
+      const saveRes = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedPayload),
       });
+      const saveData = await saveRes.json().catch(() => ({}));
+      if (saveData?.settings) {
+        window.dispatchEvent(new CustomEvent('aidev:config-updated', { detail: saveData.settings }));
+      }
 
       // 2. Automatically sync models with new provider / gateway
       setIsRefreshingModels(true);
@@ -2892,19 +2895,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               <div className="space-y-3 pt-1">
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#101010] border border-[#222226] space-y-1.5">
-                  <label className="text-[12.5px] font-medium text-[#dededf]">Gateway Endpoint (OpenAI Compatible)</label>
-                  <input
-                    type="text"
-                    value={gatewayUrl}
-                    onChange={(e) => setGatewayUrl(e.target.value)}
-                    placeholder="https://your-gateway.com/v1"
-                    className="w-full bg-[#161616] border border-[#26262a] rounded-lg px-3 py-1.5 text-[11.5px] font-mono text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#101010] border border-[#222226] space-y-1.5">
-                  <label className="text-[12.5px] font-medium text-[#dededf]">API Key / Token</label>
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#101010] border border-[#222226] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[12.5px] font-medium text-[#dededf]">API Key / Token</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fetch('/api/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'open-settings-file' }),
+                          }).catch(() => {});
+                        }}
+                        className="text-[11px] text-[#60a5fa] hover:text-[#93c5fd] transition cursor-pointer"
+                        title="Buka settings.json untuk mengubah Base URL (gatewayUrl) atau pengaturan lanjutan"
+                      >
+                        Open settings.json
+                      </button>
+                      {apiKey && (
+                        <>
+                          <span className="text-[#333338]">•</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setApiKey('');
+                              const res = await fetch('/api/config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ apiKey: '' }),
+                              });
+                              const data = await res.json().catch(() => ({}));
+                              if (data?.settings) {
+                                window.dispatchEvent(
+                                  new CustomEvent('aidev:config-updated', { detail: data.settings })
+                                );
+                              }
+                              onClose();
+                            }}
+                            className="text-[11px] text-red-400 hover:text-red-300 transition cursor-pointer"
+                          >
+                            Log Out
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <div className="relative">
                     <input
                       type={showApiKey ? 'text' : 'password'}
@@ -2921,6 +2957,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  <p className="text-[11px] text-[#737373]">
+                    Ingin mengubah Base URL custom? Klik <span className="text-[#a1a1aa] font-mono">Open settings.json</span> di atas.
+                  </p>
                 </div>
 
                 <div className="rounded-xl bg-[#101010] border border-[#222226] divide-y divide-[#1e1e20]">

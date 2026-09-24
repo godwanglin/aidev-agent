@@ -12,6 +12,7 @@ import type { WorkspaceMode } from '@/components/workspace/workspace-header';
 import { DirectoryPickerModal } from '@/components/modals/directory-picker-modal';
 import { SettingsModal } from '@/components/modals/settings-modal';
 import { ScheduledTasksModal } from '@/components/modals/scheduled-tasks-modal';
+import { ApiKeyLoginPage } from '@/components/auth/api-key-login-page';
 import type { ProjectRecord, SessionRecord, MessageRecord, SubagentRecord, SessionCompactionRecord } from '@/lib/db';
 import type { GatewayModel } from '@/lib/gateway';
 import type { ActivityItem } from '@/components/sidebar/activity-section';
@@ -76,9 +77,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
   // Config & Settings
   const [settings, setSettings] = useState<AidevSettings | null>(null);
+  const [isConfigLoaded, setIsConfigLoaded] = useState<boolean>(false);
   const [models, setModels] = useState<GatewayModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash-high');
   const [permissionMode, setPermissionMode] = useState<'ASK' | 'AUTO' | 'FULL_ACCESS'>('AUTO');
+
+  useEffect(() => {
+    const handleConfigUpdated = (e: any) => {
+      if (e?.detail) {
+        setSettings(e.detail);
+      }
+    };
+    window.addEventListener('aidev:config-updated', handleConfigUpdated);
+    return () => window.removeEventListener('aidev:config-updated', handleConfigUpdated);
+  }, []);
 
   // Projects & Sessions
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -517,6 +529,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
           setSelectedModel(cfgData.settings.defaultModel || 'gemini-3.8-flash-high');
           setPermissionMode(cfgData.settings.permissionMode || 'AUTO');
         }
+        setIsConfigLoaded(true);
 
         const loadedProjects: ProjectRecord[] = projData.projects || [];
         setProjects(loadedProjects);
@@ -607,6 +620,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         setIsLoadingSession(false);
       } catch (err) {
         console.error('Failed to initialize app state:', err);
+        setIsConfigLoaded(true);
         setIsLoadingSession(false);
       }
     };
@@ -3867,9 +3881,25 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     return projects.find((p) => p.id === splitSession.project_id) || null;
   }, [splitSession, projects]);
 
-  if (!hasMounted) {
+  if (!hasMounted || !isConfigLoaded) {
     return (
       <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none" />
+    );
+  }
+
+  if (!settings?.apiKey || !settings.apiKey.trim()) {
+    return (
+      <ApiKeyLoginPage
+        onLoginSuccess={(updatedSettings, updatedModels) => {
+          setSettings(updatedSettings);
+          if (updatedSettings.defaultModel) {
+            setSelectedModel(updatedSettings.defaultModel);
+          }
+          if (Array.isArray(updatedModels) && updatedModels.length > 0) {
+            setModels(updatedModels);
+          }
+        }}
+      />
     );
   }
 
@@ -4272,6 +4302,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
               onSelectTab={(id) => setActiveTabId(id)}
               onCloseTab={handleCloseTab}
               onNewTerminalTab={handleNewTerminal}
+              onOpenTerminal={handleOpenTerminal}
               onToggleSidebar={() => {
                 setIsRightPanelOpen(false);
               }}
@@ -4341,6 +4372,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onSelectTab={(id) => setActiveTabId(id)}
                 onCloseTab={handleCloseTab}
                 onNewTerminalTab={handleNewTerminal}
+                onOpenTerminal={handleOpenTerminal}
                 onToggleSidebar={() => {
                   if (isRightPanelMaximized) {
                     handleToggleMaximize();
