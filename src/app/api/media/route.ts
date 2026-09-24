@@ -8,6 +8,28 @@ import { getChatStorage } from '@/lib/storage';
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const rawPath = searchParams.get('path');
+    if (rawPath) {
+      const cleanAbs = path.resolve(rawPath.replace(/^file:\/\/\/?/i, ''));
+      if (fs.existsSync(cleanAbs) && fs.statSync(cleanAbs).isFile()) {
+        const ext = path.extname(cleanAbs).toLowerCase();
+        let contentType = 'application/octet-stream';
+        if (ext === '.png') contentType = 'image/png';
+        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+        else if (ext === '.gif') contentType = 'image/gif';
+        else if (ext === '.webp') contentType = 'image/webp';
+        else if (ext === '.svg') contentType = 'image/svg+xml';
+
+        const fileBuffer = fs.readFileSync(cleanAbs);
+        return new NextResponse(fileBuffer, {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=86400, immutable',
+          },
+        });
+      }
+    }
+
     const filename = searchParams.get('file');
 
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {

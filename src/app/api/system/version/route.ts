@@ -20,7 +20,7 @@ export async function GET() {
     } catch {}
 
     // 2. Read git metadata if in git repository
-    let commit = 'local';
+    let commit = `v${version}`;
     let branch = 'main';
     let isClean = true;
     try {
@@ -28,7 +28,10 @@ export async function GET() {
       branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8', timeout: 3000 }).trim();
       const statusOut = execSync('git status --porcelain', { encoding: 'utf-8', timeout: 3000 }).trim();
       isClean = statusOut.length === 0;
-    } catch {}
+    } catch {
+      commit = process.env.GIT_COMMIT || `v${version}`;
+      branch = 'release';
+    }
 
     // 3. Runtime diagnostics
     const runtime = {

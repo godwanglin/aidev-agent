@@ -1155,6 +1155,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({
               src={
                 filePath.startsWith('/api/media')
                   ? filePath
+                  : filePath.includes('/') || filePath.includes('\\')
+                  ? `/api/media?path=${encodeURIComponent(filePath)}`
                   : `/api/media?file=${encodeURIComponent(filePath.split('/').pop() || '')}`
               }
               alt={filePath}

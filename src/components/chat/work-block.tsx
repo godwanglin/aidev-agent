@@ -17,6 +17,7 @@ export interface WorkBlockProps {
   onOpenBrowser?: (url: string) => void;
   defaultOpen?: boolean;
   verbose?: boolean;
+  latestUpdateTodosId?: string | null;
 }
 
 export function formatDuration(ms: number): string {
@@ -39,6 +40,7 @@ export const WorkBlock = React.memo<WorkBlockProps>(function WorkBlock({
   onOpenBrowser,
   defaultOpen = false,
   verbose = true,
+  latestUpdateTodosId,
 }) {
   // Open by default while streaming only if verbose is true; collapsed otherwise
   const [isOpen, setIsOpen] = useState((isStreaming && verbose) || defaultOpen);
@@ -188,6 +190,7 @@ export const WorkBlock = React.memo<WorkBlockProps>(function WorkBlock({
                 onOpenFile={onOpenFile}
                 onOpenBrowser={onOpenBrowser}
                 verbose={verbose}
+                latestUpdateTodosId={latestUpdateTodosId}
               />
             )
           )}

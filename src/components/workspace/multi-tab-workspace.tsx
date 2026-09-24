@@ -132,8 +132,24 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
         setIsQuickOpenOpen(true);
       }
     };
+    const handleOpenQuickOpen = () => {
+      setQuickOpenMode('files');
+      setIsQuickOpenOpen(true);
+    };
+
+    const handleOpenQuickGrep = () => {
+      setQuickOpenMode('grep');
+      setIsQuickOpenOpen(true);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('aidev:open-quick-open', handleOpenQuickOpen);
+    window.addEventListener('aidev:open-grep', handleOpenQuickGrep);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('aidev:open-quick-open', handleOpenQuickOpen);
+      window.removeEventListener('aidev:open-grep', handleOpenQuickGrep);
+    };
   }, []);
 
   const effectiveMode = activeModeProp !== undefined ? activeModeProp : internalMode;

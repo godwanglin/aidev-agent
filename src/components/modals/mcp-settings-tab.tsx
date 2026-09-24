@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import type { McpServerRuntimeInfo, McpServerConfig, McpConfigFile } from '@/lib/mcp/types';
 import { useConfirm } from '@/context/confirm-context';
+import { McpStoreView } from './mcp-store-view';
+import type { McpCatalogItem } from '@/lib/mcp/catalog';
 
 // Sleek iOS/Antigravity-styled compact toggle switch (matches settings-modal.tsx)
 const ToggleSwitch: React.FC<{
@@ -50,99 +52,6 @@ const ToggleSwitch: React.FC<{
   </button>
 );
 
-interface McpPreset {
-  id: string;
-  name: string;
-  description: string;
-  command: string;
-  args: string;
-  transport: 'stdio' | 'sse';
-  env: Array<{ key: string; value: string }>;
-  loadingMode: 'eager' | 'lazy';
-}
-
-const MCP_PRESETS: McpPreset[] = [
-  {
-    id: 'chrome-devtools',
-    name: 'Chrome DevTools',
-    description: 'Automate Chrome, take screenshots, navigate, and inspect DOM.',
-    command: 'npx',
-    args: '-y chrome-devtools-mcp@latest',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'lazy',
-  },
-  {
-    id: 'filesystem',
-    name: 'Local Filesystem',
-    description: 'Read and edit files in specified directories outside workspace.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-filesystem C:\\dev',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'github',
-    name: 'GitHub API',
-    description: 'Search repos, inspect pull requests, issues, and commit trees.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-github',
-    transport: 'stdio',
-    env: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', value: '' }],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'sqlite',
-    name: 'SQLite Database',
-    description: 'Execute SQL queries, inspect tables, and schema in SQLite databases.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-sqlite --db-path ./database.sqlite',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'postgres',
-    name: 'PostgreSQL Database',
-    description: 'Query PostgreSQL databases and inspect schema relations.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-postgres postgresql://localhost/mydb',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'brave-search',
-    name: 'Brave Web Search',
-    description: 'Perform real-time web and news searches via Brave Search API.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-brave-search',
-    transport: 'stdio',
-    env: [{ key: 'BRAVE_API_KEY', value: '' }],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'memory',
-    name: 'Memory Graph',
-    description: 'Persistent graph-based memory and knowledge store across sessions.',
-    command: 'npx',
-    args: '-y @modelcontextprotocol/server-memory',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'eager',
-  },
-  {
-    id: 'fetch',
-    name: 'Web Fetch / HTML',
-    description: 'Fetch web pages, convert to markdown, and extract text contents.',
-    command: 'uvx',
-    args: 'mcp-server-fetch',
-    transport: 'stdio',
-    env: [],
-    loadingMode: 'eager',
-  },
-];
 
 function parseArgs(raw: string): string[] {
   const regex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
@@ -164,7 +73,8 @@ export const McpSettingsTab: React.FC = () => {
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const [servers, setServers] = useState<McpServerRuntimeInfo[]>([]);
   const [rawConfig, setRawConfig] = useState<string>('{}');
-  const [viewMode, setViewMode] = useState<'cards' | 'json'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'json' | 'marketplace'>('cards');
+  const [installingServerId, setInstallingServerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
@@ -178,11 +88,9 @@ export const McpSettingsTab: React.FC = () => {
   const [expandedToolsServer, setExpandedToolsServer] = useState<string | null>(null);
 
   // Dropdown States in Modal
-  const [openPresetDropdown, setOpenPresetDropdown] = useState(false);
   const [openLoadingModeDropdown, setOpenLoadingModeDropdown] = useState(false);
 
   // Refs for click outside
-  const presetDropdownRef = useRef<HTMLDivElement>(null);
   const loadingModeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Form State for Add / Edit
@@ -200,9 +108,6 @@ export const McpSettingsTab: React.FC = () => {
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (presetDropdownRef.current && !presetDropdownRef.current.contains(e.target as Node)) {
-        setOpenPresetDropdown(false);
-      }
       if (loadingModeDropdownRef.current && !loadingModeDropdownRef.current.contains(e.target as Node)) {
         setOpenLoadingModeDropdown(false);
       }
@@ -386,7 +291,6 @@ export const McpSettingsTab: React.FC = () => {
     setFormEnv(envPairs.length > 0 ? envPairs : [{ key: '', value: '' }]);
     setFormLoadingMode(cfg.loadingMode === 'lazy' ? 'lazy' : 'eager');
     setFormAutoApprove(Boolean(cfg.autoApprove));
-    setOpenPresetDropdown(false);
     setOpenLoadingModeDropdown(false);
     setShowAddModal(true);
   };
@@ -397,25 +301,84 @@ export const McpSettingsTab: React.FC = () => {
     setFormName('');
     setFormTransport('stdio');
     setFormCommand('npx');
-    setFormArgs('-y @modelcontextprotocol/server-github');
+    setFormArgs('');
     setFormServerUrl('');
     setFormEnv([{ key: '', value: '' }]);
     setFormLoadingMode('eager');
     setFormAutoApprove(false);
-    setOpenPresetDropdown(false);
     setOpenLoadingModeDropdown(false);
     setShowAddModal(true);
   };
 
-  // Apply a preset
-  const applyPreset = (preset: McpPreset) => {
-    setFormName(preset.id);
-    setFormTransport(preset.transport);
-    setFormCommand(preset.command);
-    setFormArgs(preset.args);
-    setFormEnv(preset.env.length > 0 ? preset.env : [{ key: '', value: '' }]);
-    setFormLoadingMode(preset.loadingMode);
-    setOpenPresetDropdown(false);
+  // Install or configure from Catalog
+  const handleInstallFromCatalog = async (item: McpCatalogItem) => {
+    const hasRequiredEnv = item.env && item.env.some((e) => !e.value);
+    if (hasRequiredEnv || (!item.command && !item.serverUrl)) {
+      setFormName(item.id);
+      setFormTransport(item.transport);
+      setFormCommand(item.command || 'npx');
+      setFormArgs(item.args || '');
+      setFormServerUrl(item.serverUrl || '');
+      setFormEnv(item.env && item.env.length > 0 ? item.env : [{ key: '', value: '' }]);
+      setFormLoadingMode(item.loadingMode || 'eager');
+      setFormAutoApprove(false);
+      setEditingServerName(null);
+      setOpenLoadingModeDropdown(false);
+      setShowAddModal(true);
+      return;
+    }
+
+    setInstallingServerId(item.id);
+    try {
+      const newConfig: McpServerConfig = {
+        loadingMode: item.loadingMode || 'eager',
+        autoApprove: false,
+        disabled: false,
+      };
+
+      if (item.transport === 'sse') {
+        newConfig.serverUrl = item.serverUrl;
+      } else {
+        newConfig.command = item.command || 'npx';
+        newConfig.args = parseArgs(item.args || '');
+        if (item.env && item.env.length > 0) {
+          const envObj: Record<string, string> = {};
+          for (const ev of item.env) {
+            if (ev.key.trim()) envObj[ev.key.trim()] = ev.value;
+          }
+          if (Object.keys(envObj).length > 0) newConfig.env = envObj;
+        }
+      }
+
+      const res = await fetch('/api/mcp/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: item.id, config: newConfig }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchServers();
+        customAlert({
+          title: 'MCP Server Installed',
+          message: `Successfully installed "${item.name}". The server is now ready.`,
+          variant: 'primary',
+        });
+      } else {
+        customAlert({
+          title: 'MCP Server',
+          message: data.error || 'Failed to install MCP server',
+          variant: 'info',
+        });
+      }
+    } catch (err: any) {
+      customAlert({
+        title: 'MCP Server',
+        message: err.message || 'Failed to install MCP server',
+        variant: 'info',
+      });
+    } finally {
+      setInstallingServerId(null);
+    }
   };
 
   // Save Add / Edit Form
@@ -511,82 +474,90 @@ export const McpSettingsTab: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in pr-0 sm:pr-2 pb-6 text-sans select-none">
-      {/* 1. Header (Clean & Uncluttered, with right margin for modal X) */}
-      <div className="pb-3.5 border-b border-[#202022] pr-10">
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-semibold text-[#f5f5f7] tracking-tight">MCP Servers</h2>
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-              connectedCount > 0
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/60'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                connectedCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'
-              }`}
-            />
-            {connectedCount} Active
-          </span>
-        </div>
-        <p className="text-[12px] text-[#868686] mt-1 leading-relaxed">
-          Connect external Model Context Protocol (MCP) tools and data services to your coding agent.
-        </p>
-      </div>
+      {viewMode === 'marketplace' ? (
+        <McpStoreView
+          onBack={() => setViewMode('cards')}
+          onOpenCustomAdd={handleOpenAdd}
+          installedServers={servers}
+          onInstall={handleInstallFromCatalog}
+          installingServerId={installingServerId}
+        />
+      ) : (
+        <>
+          {/* 1. Header (Clean & Uncluttered, with right margin for modal X) */}
+          <div className="pb-3.5 border-b border-[#202022] pr-10">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-lg font-semibold text-[#f5f5f7] tracking-tight">MCP Servers</h2>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
+                  connectedCount > 0
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/60'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    connectedCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'
+                  }`}
+                />
+                {connectedCount} Active
+              </span>
+            </div>
+            <p className="text-[12px] text-[#868686] mt-1 leading-relaxed">
+              Connect external Model Context Protocol (MCP) tools and data services to your coding agent.
+            </p>
+          </div>
 
-      {/* 2. Action Toolbar (Neat, balanced, below header) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
-        {/* Mode Switcher Segmented Pills */}
-        <div className="flex items-center p-0.5 bg-[#141416] border border-[#222226] rounded-xl self-start">
-          <button
-            type="button"
-            onClick={() => setViewMode('cards')}
-            className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition cursor-pointer ${
-              viewMode === 'cards'
-                ? 'bg-[#282830] text-white shadow-sm'
-                : 'text-[#888888] hover:text-white'
-            }`}
-          >
-            Visual Cards
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('json')}
-            className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition cursor-pointer ${
-              viewMode === 'json'
-                ? 'bg-[#282830] text-white shadow-sm'
-                : 'text-[#888888] hover:text-white'
-            }`}
-          >
-            Raw JSON
-          </button>
-        </div>
+          {/* 2. Action Toolbar (Neat, balanced, below header) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
+            {/* Mode Switcher Segmented Pills */}
+            <div className="flex items-center p-0.5 bg-[#141416] border border-[#222226] rounded-xl self-start">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-[#282830] text-white shadow-sm'
+                    : 'text-[#888888] hover:text-white'
+                }`}
+              >
+                Visual Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('json')}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition cursor-pointer ${
+                  viewMode === 'json'
+                    ? 'bg-[#282830] text-white shadow-sm'
+                    : 'text-[#888888] hover:text-white'
+                }`}
+              >
+                Raw JSON
+              </button>
+            </div>
 
-        {/* Right Actions: Refresh + Add Server */}
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={fetchServers}
-            disabled={isLoading}
-            title="Refresh servers"
-            className="p-2 rounded-xl border border-[#26262a] bg-[#161618] hover:bg-[#202024] text-[#a0a0a0] hover:text-white transition cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
-          </button>
+            {/* Right Actions: Refresh + Add Server */}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={fetchServers}
+                disabled={isLoading}
+                title="Refresh servers"
+                className="p-2 rounded-xl border border-[#26262a] bg-[#161618] hover:bg-[#202024] text-[#a0a0a0] hover:text-white transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
+              </button>
 
-          {viewMode === 'cards' && (
-            <button
-              type="button"
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#007acc] hover:bg-[#0066aa] text-white text-[12px] font-medium transition cursor-pointer shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Server</span>
-            </button>
-          )}
-        </div>
-      </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('marketplace')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#007acc] hover:bg-[#0066aa] text-white text-[12px] font-medium transition cursor-pointer shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Server</span>
+              </button>
+            </div>
+          </div>
 
       {errorMessage && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[12.5px] flex items-center gap-2">
@@ -642,52 +613,43 @@ export const McpSettingsTab: React.FC = () => {
                   {/* Card Main Row */}
                   <div className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     {/* Left Info */}
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                          isConnected
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : isError
-                            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                            : isConnecting
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                        }`}
-                      >
-                        <Server className="w-4 h-4" />
-                      </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[13.5px] font-semibold text-white truncate">
+                              {server.name}
+                            </span>
+                            {isConnected && (
+                              <span
+                                className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                                title="Connected"
+                              />
+                            )}
+                          </div>
 
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13.5px] font-semibold text-white truncate">
-                            {server.name}
-                          </span>
-
-                          {/* Status Pill */}
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              isConnected
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : isError
-                                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                : isConnecting
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}
-                          >
+                          {/* Status Pill (only shown when not connected) */}
+                          {!isConnected && (
                             <span
-                              className={`w-1 h-1 rounded-full ${
-                                isConnected
-                                  ? 'bg-emerald-400'
-                                  : isError
-                                  ? 'bg-red-400'
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                isError
+                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                                   : isConnecting
-                                  ? 'bg-amber-400 animate-pulse'
-                                  : 'bg-zinc-500'
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                               }`}
-                            />
-                            {server.status}
-                          </span>
+                            >
+                              <span
+                                className={`w-1 h-1 rounded-full ${
+                                  isError
+                                    ? 'bg-red-400'
+                                    : isConnecting
+                                    ? 'bg-amber-400 animate-pulse'
+                                    : 'bg-zinc-500'
+                                }`}
+                              />
+                              {server.status}
+                            </span>
+                          )}
 
                           {/* Loading Mode Pill (Interactive toggle) */}
                           <button
@@ -724,7 +686,6 @@ export const McpSettingsTab: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                    </div>
 
                     {/* Right Controls */}
                     <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -883,8 +844,10 @@ export const McpSettingsTab: React.FC = () => {
           </div>
         </div>
       )}
+    </>
+  )}
 
-      {/* 5. Modal: Add / Edit Server */}
+  {/* 5. Modal: Add / Edit Server */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100050] bg-black/75 flex items-center justify-center p-3 sm:p-4 animate-fade-in">
           <div className="w-full max-w-lg bg-[#141416] border border-[#2a2a30] rounded-2xl shadow-2xl p-5 space-y-4 animate-dropdown max-h-[92vh] overflow-y-auto">
@@ -906,56 +869,6 @@ export const McpSettingsTab: React.FC = () => {
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            {/* Quick Presets Dropdown */}
-            {!editingServerName && (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#18181c] border border-[#26262c]">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span className="text-[12px] text-[#c0c0c6]">Quick Presets</span>
-                </div>
-
-                <div className="relative" ref={presetDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenPresetDropdown(!openPresetDropdown)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#222228] hover:bg-[#2a2a32] border border-[#303038] text-[11.5px] font-medium text-[#dededf] transition cursor-pointer whitespace-nowrap"
-                  >
-                    <span>Pick Template...</span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#888] transition-transform duration-150 ${
-                        openPresetDropdown ? 'rotate-180 text-white' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {openPresetDropdown && (
-                    <div className="absolute right-0 top-full mt-1.5 w-72 max-h-64 overflow-y-auto z-50 bg-[#18181c] border border-[#2c2c34] rounded-xl shadow-2xl p-1 animate-dropdown scrollbar-thin scrollbar-thumb-[#2c2c34]">
-                      {MCP_PRESETS.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => applyPreset(preset)}
-                          className="w-full text-left p-2 rounded-lg hover:bg-[#24242c] transition cursor-pointer group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12px] font-medium text-white group-hover:text-blue-400">
-                              {preset.name}
-                            </span>
-                            <span className="text-[9.5px] font-mono uppercase px-1 py-0.2 rounded bg-[#202026] text-[#888]">
-                              {preset.command}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#888] line-clamp-1 mt-0.5 leading-snug">
-                            {preset.description}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             <form onSubmit={handleSaveForm} className="space-y-3.5">
               {/* Name */}

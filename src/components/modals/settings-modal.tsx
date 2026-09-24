@@ -116,17 +116,17 @@ const BROWSER_JS_POLICIES = [
   },
 ];
 
-// Application Shell options
-const SHELL_OPTIONS = [
+// Application Shell options per Operating System
+const WINDOWS_SHELL_OPTIONS = [
   {
     id: 'powershell',
     label: 'Windows PowerShell',
-    desc: 'Default Windows command execution shell (powershell.exe).',
+    desc: 'Default Windows command execution shell (powershell.exe) - recommended.',
   },
   {
     id: 'cmd',
     label: 'Command Prompt',
-    desc: 'Legacy Windows batch and command interpreter (cmd.exe).',
+    desc: 'Standard Windows batch and command interpreter (cmd.exe).',
   },
   {
     id: 'bash',
@@ -134,6 +134,55 @@ const SHELL_OPTIONS = [
     desc: 'Unix-compatible bash shell emulation (bash.exe).',
   },
 ];
+
+const LINUX_SHELL_OPTIONS = [
+  {
+    id: 'bash',
+    label: 'Bash (/bin/bash)',
+    desc: 'Default Linux Bourne-Again Shell - recommended.',
+  },
+  {
+    id: 'zsh',
+    label: 'Z Shell (/bin/zsh)',
+    desc: 'Zsh interactive shell with extended features & plugins.',
+  },
+  {
+    id: 'sh',
+    label: 'POSIX Shell (/bin/sh)',
+    desc: 'Standard lightweight POSIX system shell.',
+  },
+  {
+    id: 'fish',
+    label: 'Fish Shell (fish)',
+    desc: 'Smart user-friendly command line shell.',
+  },
+];
+
+const MAC_SHELL_OPTIONS = [
+  {
+    id: 'zsh',
+    label: 'Z Shell (/bin/zsh)',
+    desc: 'Default macOS shell (zsh) - recommended.',
+  },
+  {
+    id: 'bash',
+    label: 'Bash (/bin/bash)',
+    desc: 'Bourne-Again Shell on macOS.',
+  },
+  {
+    id: 'sh',
+    label: 'POSIX Shell (/bin/sh)',
+    desc: 'Standard POSIX system shell.',
+  },
+];
+
+const ALL_SHELL_OPTIONS = [
+  ...WINDOWS_SHELL_OPTIONS,
+  ...LINUX_SHELL_OPTIONS,
+  ...MAC_SHELL_OPTIONS,
+];
+
+const SHELL_OPTIONS = WINDOWS_SHELL_OPTIONS;
 
 // Models & Reasoning Effort options
 const MODEL_OPTIONS = [
@@ -378,7 +427,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
 
   // Application
-  const [defaultShell, setDefaultShell] = useState('powershell');
+  const [defaultShell, setDefaultShell] = useState(() =>
+    typeof navigator !== 'undefined' && /Linux|X11/i.test(navigator.userAgent) && !/Android/i.test(navigator.userAgent)
+      ? 'bash'
+      : 'powershell'
+  );
   const [terminalTimeout, setTerminalTimeout] = useState(120);
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -816,6 +869,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }
   const [versionData, setVersionData] = useState<SystemVersionData | null>(null);
 
+  // Platform Detection (Windows vs Linux vs macOS)
+  const isLinuxClient = typeof navigator !== 'undefined' && /Linux|X11/i.test(navigator.userAgent) && !/Android/i.test(navigator.userAgent);
+  const isMacClient = typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent);
+  const detectedPlatform = versionData?.runtime?.platform || (isLinuxClient ? 'linux' : (isMacClient ? 'darwin' : 'win32'));
+  const isLinux = detectedPlatform === 'linux';
+  const isMac = detectedPlatform === 'darwin';
+
+  const activeShellOptions = isLinux
+    ? LINUX_SHELL_OPTIONS
+    : isMac
+    ? MAC_SHELL_OPTIONS
+    : WINDOWS_SHELL_OPTIONS;
+
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     setUpdateStatus('checking');
@@ -843,10 +909,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && activeTab === 'application' && autoUpdate && !versionData) {
+    if (isOpen && !versionData) {
       handleCheckForUpdates();
     }
-  }, [isOpen, activeTab, autoUpdate, versionData]);
+  }, [isOpen, versionData]);
+
+  useEffect(() => {
+    if (isLinux && (defaultShell === 'powershell' || defaultShell === 'cmd')) {
+      handleSetDefaultShell('bash');
+    }
+  }, [isLinux, defaultShell]);
 
   const handleSetTerminalTimeout = (val: number) => {
     setTerminalTimeout(val);
@@ -2272,7 +2344,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#202022] hover:bg-[#28282c] border border-[#2e2e34] text-[11.5px] font-medium text-[#dededf] transition cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <span>
-                        {SHELL_OPTIONS.find((s) => s.id === defaultShell)?.label || defaultShell}
+                        {ALL_SHELL_OPTIONS.find((s) => s.id === defaultShell)?.label || defaultShell}
                       </span>
                       <ChevronDown className="w-3.5 h-3.5 text-[#868686]" />
                     </button>
@@ -2284,7 +2356,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       zIndex={100020}
                       className="w-full sm:w-64 max-h-[80vh] sm:max-h-[380px] overflow-y-auto sm:top-full sm:right-0 sm:mt-1 bg-[#161616] border-t sm:border border-[#28282e] py-2 sm:py-1 divide-y divide-[#202024]"
                     >
-                      {SHELL_OPTIONS.map((opt) => {
+                      {activeShellOptions.map((opt) => {
                         const isSelected = defaultShell === opt.id;
                         return (
                           <button

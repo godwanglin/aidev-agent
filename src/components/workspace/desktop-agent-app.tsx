@@ -3224,8 +3224,9 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     filePath: string,
     lineRange?: { startLine?: number; endLine?: number }
   ) => {
-    if (!currentProject) return;
     let cleanPath = filePath.replace(/^file:\/\/\/?/i, '').replace(/\\/g, '/');
+    const effectiveWorkdir = currentProject?.workdir_path || '';
+    const currentSessionId = currentSession?.id || '';
     const tabId = `file_${cleanPath}`;
     const existing = tabs.find((t) => t.id === tabId);
     if (existing) {
@@ -3233,8 +3234,8 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         try {
           const res = await fetch(
             `/api/files/read?workdir=${encodeURIComponent(
-              currentProject.workdir_path
-            )}&path=${encodeURIComponent(cleanPath)}&sessionId=${encodeURIComponent(currentSession?.id || '')}`
+              effectiveWorkdir
+            )}&path=${encodeURIComponent(cleanPath)}&sessionId=${encodeURIComponent(currentSessionId)}`
           );
           const data = await res.json();
           if (data.content !== undefined) {
@@ -3267,8 +3268,8 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       try {
         const res = await fetch(
           `/api/files/read?workdir=${encodeURIComponent(
-            currentProject.workdir_path
-          )}&path=${encodeURIComponent(cleanPath)}&sessionId=${encodeURIComponent(currentSession?.id || '')}`
+            effectiveWorkdir
+          )}&path=${encodeURIComponent(cleanPath)}&sessionId=${encodeURIComponent(currentSessionId)}`
         );
         const data = await res.json();
         if (data.content !== undefined) content = data.content;
@@ -3547,6 +3548,38 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     setWorkspaceMode('file');
   };
 
+  // Listen for terminal events from Titlebar / Keyboard shortcuts
+  useEffect(() => {
+    const onNewTerminal = () => {
+      handleNewTerminal();
+    };
+
+    const onToggleTerminal = () => {
+      const existingTerm = tabs.find((t) => t.type === 'terminal');
+      const isShowingTerminal =
+        isRightPanelOpen &&
+        (workspaceMode === 'terminal' ||
+          (workspaceMode === 'file' && existingTerm && activeTabId === existingTerm.id));
+
+      if (isShowingTerminal) {
+        setIsRightPanelOpen(false);
+      } else if (existingTerm) {
+        setIsRightPanelOpen(true);
+        setActiveTabId(existingTerm.id);
+        setWorkspaceMode('file');
+      } else {
+        handleNewTerminal();
+      }
+    };
+
+    window.addEventListener('aidev:new-terminal', onNewTerminal);
+    window.addEventListener('aidev:toggle-terminal', onToggleTerminal);
+    return () => {
+      window.removeEventListener('aidev:new-terminal', onNewTerminal);
+      window.removeEventListener('aidev:toggle-terminal', onToggleTerminal);
+    };
+  }, [tabs, currentProject, isRightPanelOpen, workspaceMode, activeTabId]);
+
   const handleToggleMaximize = () => {
     if (isRightPanelMaximized) {
       // Un-maximize / restore back to previous state
@@ -3799,14 +3832,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isRightPanelMaximized]);
 
-  // Block native browser zoom globally (Ctrl+/- , Ctrl+0, Ctrl+scroll)
-  // The editor's own zoom handler in file-viewer.tsx handles editor font sizing.
-  // This prevents the native browser zoom from firing elsewhere in the app.
+  // Route keyboard zoom shortcuts to Electron window zoom
   useEffect(() => {
-    const blockZoomKeys = (e: KeyboardEvent) => {
+    const api = (window as any).electronAPI;
+    const handleZoomKeys = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '_' || e.key === '0') {
+        if (e.key === '=' || e.key === '+') {
           e.preventDefault();
+          api?.zoomIn?.();
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          api?.zoomOut?.();
+        } else if (e.key === '0') {
+          e.preventDefault();
+          api?.resetZoom?.();
         }
       }
     };
@@ -3815,10 +3854,10 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         e.preventDefault();
       }
     };
-    window.addEventListener('keydown', blockZoomKeys);
+    window.addEventListener('keydown', handleZoomKeys);
     window.addEventListener('wheel', blockZoomWheel, { passive: false });
     return () => {
-      window.removeEventListener('keydown', blockZoomKeys);
+      window.removeEventListener('keydown', handleZoomKeys);
       window.removeEventListener('wheel', blockZoomWheel);
     };
   }, []);
@@ -3830,12 +3869,12 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
   if (!hasMounted) {
     return (
-      <div className="fixed inset-0 w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none" />
+      <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none" />
     );
   }
 
   return (
-    <div className="fixed inset-0 w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none">
+    <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none">
       {/* 1. Global Top Bar */}
       <TopBar
         onToggleSidebar={() => {

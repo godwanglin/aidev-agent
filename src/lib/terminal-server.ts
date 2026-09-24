@@ -3,6 +3,8 @@ import { spawn, execFileSync } from 'child_process';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
 import type { IncomingMessage } from 'http';
 import url from 'url';
+import fs from 'fs';
+import os from 'os';
 import { loadSettings } from './storage';
 
 interface TerminalSession {
@@ -30,7 +32,22 @@ export function setupTerminalWebSocket(wss: WebSocketServer) {
     }
 
     const sessionId = (parsedUrl.query.sessionId as string) || `term_${Date.now()}`;
-    const workdir = (parsedUrl.query.workdir as string) || process.cwd();
+    const rawWorkdir = (parsedUrl.query.workdir as string) || process.cwd();
+    let safeWorkdir = rawWorkdir;
+    let workdirFallbackUsed = false;
+
+    if (!fs.existsSync(safeWorkdir)) {
+      try {
+        fs.mkdirSync(safeWorkdir, { recursive: true });
+      } catch {
+        safeWorkdir = process.env.USERPROFILE || process.env.HOME || os.homedir() || process.cwd();
+        workdirFallbackUsed = true;
+      }
+    }
+    if (!fs.existsSync(safeWorkdir)) {
+      safeWorkdir = process.cwd();
+      workdirFallbackUsed = true;
+    }
 
     const existing = activeTerminals.get(sessionId);
 
@@ -75,29 +92,44 @@ export function setupTerminalWebSocket(wss: WebSocketServer) {
 
     const settings = loadSettings();
     const isWindows = process.platform === 'win32';
+    const chosenShell = (settings.defaultShell || (isWindows ? 'powershell' : 'bash')).toLowerCase();
+
     let shell = isWindows
-      ? process.env.COMSPEC || 'cmd.exe'
-      : process.env.SHELL || '/bin/bash';
+      ? (process.env.COMSPEC || 'cmd.exe')
+      : (process.env.SHELL || '/bin/bash');
+    let shellArgs = isWindows ? ['/Q'] : ['-i'];
 
-    let shellArgs = isWindows ? ['/Q'] : [];
-
-    if (isWindows && settings.defaultShell) {
-      if (settings.defaultShell === 'powershell') {
+    if (isWindows) {
+      if (chosenShell === 'powershell') {
         shell = 'powershell.exe';
         shellArgs = ['-NoLogo'];
-      } else if (settings.defaultShell === 'cmd') {
+      } else if (chosenShell === 'cmd') {
         shell = process.env.COMSPEC || 'cmd.exe';
         shellArgs = ['/Q'];
-      } else if (settings.defaultShell === 'bash') {
+      } else if (chosenShell === 'bash') {
         shell = 'bash.exe';
-        shellArgs = [];
+        shellArgs = ['-i'];
+      }
+    } else {
+      if (chosenShell === 'zsh') {
+        shell = '/bin/zsh';
+        shellArgs = ['-i'];
+      } else if (chosenShell === 'sh') {
+        shell = '/bin/sh';
+        shellArgs = ['-i'];
+      } else if (chosenShell === 'fish') {
+        shell = 'fish';
+        shellArgs = ['-i'];
+      } else {
+        shell = process.env.SHELL || '/bin/bash';
+        shellArgs = ['-i'];
       }
     }
 
     let child: ChildProcessWithoutNullStreams;
     try {
       child = spawn(shell, shellArgs, {
-        cwd: workdir,
+        cwd: safeWorkdir,
         env: {
           ...process.env,
           TERM: 'xterm-256color',
@@ -114,7 +146,7 @@ export function setupTerminalWebSocket(wss: WebSocketServer) {
       id: sessionId,
       process: child,
       ws,
-      workdir,
+      workdir: safeWorkdir,
       buffer: '',
       lineBuffer: '',
       history: [],
@@ -134,6 +166,11 @@ export function setupTerminalWebSocket(wss: WebSocketServer) {
         terminalSession.ws.send(JSON.stringify({ type: 'output', data }));
       }
     };
+
+    if (workdirFallbackUsed || safeWorkdir !== rawWorkdir) {
+      const notice = `\r\n\x1b[33m[Aidev Terminal] Notice: Project directory "${rawWorkdir}" does not exist on disk.\x1b[0m\r\n\x1b[36m-> Fallback working directory: "${safeWorkdir}"\x1b[0m\r\n\r\n`;
+      sendOutput(notice);
+    }
 
     // Forward stdout & stderr to xterm.js
     child.stdout.on('data', (data: Buffer) => {

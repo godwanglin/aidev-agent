@@ -14,6 +14,7 @@ import { TurnDiffCard, extractTurnChanges, type TurnChanges } from './turn-diff-
 import { SelectionQuoteButton } from '@/components/common/selection-quote-button';
 import { useTheme } from '@/context/theme-context';
 import { CompactionDivider } from './compaction-divider';
+import { TodoCard, type TodoItemData } from './todo-card';
 import type { MessageRecord, ProjectRecord, SessionCompactionRecord } from '@/lib/db';
 import type { GatewayModel } from '@/lib/gateway';
 
@@ -95,6 +96,44 @@ export interface TurnSegment {
   durationMs?: number;
 }
 
+export function extractTodosFromMessage(msg?: MessageRecord | null): TodoItemData[] | null {
+  if (!msg) return null;
+  const toolName = (msg.tool_name || '').toLowerCase();
+  if (!['update_todos', 'todo_write', 'update_todo', 'manage_tasks', 'todos', 'tasks'].includes(toolName)) {
+    return null;
+  }
+  let parsed: any = null;
+  if (msg.tool_arguments) {
+    try {
+      parsed = JSON.parse(msg.tool_arguments);
+    } catch {}
+  }
+  if (!parsed && msg.content) {
+    try {
+      parsed = JSON.parse(msg.content);
+    } catch {}
+  }
+  if (!parsed && msg.tool_result) {
+    try {
+      parsed = JSON.parse(msg.tool_result);
+    } catch {}
+  }
+
+  const rawList = parsed?.todos || parsed?.items || parsed?.tasks || (Array.isArray(parsed) ? parsed : null);
+  if (Array.isArray(rawList) && rawList.length > 0) {
+    return rawList.map((item: any, idx: number) => ({
+      id: String(item.id || item.title || idx),
+      title: String(item.title || item.task || item.description || `Task ${idx + 1}`),
+      status: (item.status === 'completed' || item.status === 'done'
+        ? 'completed'
+        : item.status === 'in_progress' || item.status === 'active' || item.status === 'running'
+        ? 'in_progress'
+        : 'pending') as 'pending' | 'in_progress' | 'completed',
+    }));
+  }
+  return null;
+}
+
 interface ConversationTurn {
   id: string;
   userMessage?: MessageRecord;
@@ -102,6 +141,7 @@ interface ConversationTurn {
   steps: TurnStep[];
   assistantMessage?: MessageRecord;
   turnChanges?: TurnChanges | null;
+  taskTodos?: TodoItemData[] | null;
 }
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
@@ -215,6 +255,20 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     }
   }, [messages, streamingContent, streamingReasoning, liveToolMessages, pendingPermission, pendingPlan, pendingQuestion, isStreaming]);
 
+  // Latest live task todos from liveToolMessages
+  const liveTodos = useMemo(() => {
+    for (let i = liveToolMessages.length - 1; i >= 0; i--) {
+      const todos = extractTodosFromMessage(liveToolMessages[i]);
+      if (todos) return todos;
+    }
+    return null;
+  }, [liveToolMessages]);
+
+  // Filtered liveToolMessages without task todos for WorkBlock
+  const filteredLiveToolMessages = useMemo(() => {
+    return liveToolMessages.filter((m) => !extractTodosFromMessage(m));
+  }, [liveToolMessages]);
+
   // Group messages into conversational turns and interleaved work blocks
   const turns = useMemo(() => {
     const result: ConversationTurn[] = [];
@@ -276,6 +330,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           userMessage: msg,
           segments: [],
           steps: [],
+          taskTodos: null,
         };
       } else if (msg.role === 'tool') {
         if (!currentTurn) {
@@ -283,21 +338,29 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             id: `turn_orphan_${msg.id}`,
             segments: [],
             steps: [],
+            taskTodos: null,
           };
           seenStepKeys = new Set<string>();
           currentSteps = [];
           pendingAssistantIntro = null;
         }
-        const toolKey = msg.tool_call_id ? `tc_${msg.tool_call_id}` : `msg_${msg.id}`;
-        if (!seenStepKeys.has(toolKey)) {
-          seenStepKeys.add(toolKey);
-          const step: TurnStep = {
-            id: `step_${msg.id}`,
-            type: 'tool',
-            toolMessage: msg,
-          };
-          currentSteps.push(step);
-          currentTurn.steps.push(step);
+
+        const toolTodos = extractTodosFromMessage(msg);
+        if (toolTodos) {
+          currentTurn.taskTodos = toolTodos;
+          // Dedicated Standalone Task List: do not push into currentSteps so WorkBlock stays clean!
+        } else {
+          const toolKey = msg.tool_call_id ? `tc_${msg.tool_call_id}` : `msg_${msg.id}`;
+          if (!seenStepKeys.has(toolKey)) {
+            seenStepKeys.add(toolKey);
+            const step: TurnStep = {
+              id: `step_${msg.id}`,
+              type: 'tool',
+              toolMessage: msg,
+            };
+            currentSteps.push(step);
+            currentTurn.steps.push(step);
+          }
         }
       } else if (msg.role === 'assistant') {
         if (!currentTurn) {
@@ -481,132 +544,201 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               </div>
             )}
 
-            {/* Render Conversational Turns */}
-            {turns.map((turn, turnIdx) => {
-            const isLastTurn = turnIdx === turns.length - 1;
-            const isThisTurnStreaming = isLastTurn && isStreaming;
-            const diffCardNode = !isThisTurnStreaming && turn.turnChanges ? (
-              <TurnDiffCard
-                changes={turn.turnChanges}
-                onOpenFileDiff={onOpenFileDiff}
-                onOpenFile={onOpenFile}
-                onOpenReview={onOpenReview}
-                className="pt-2 pb-1 select-none"
-              />
-            ) : null;
+            {/* Find strictly the latest turn that has todos to ensure only 1 card is displayed */}
+            {(() => {
+              const latestTurnWithTodosId = (() => {
+                for (let i = turns.length - 1; i >= 0; i--) {
+                  const t = turns[i];
+                  const isThisStreaming = i === turns.length - 1 && isStreaming;
+                  if (isThisStreaming && liveTodos && liveTodos.length > 0) {
+                    return t.id;
+                  }
+                  if (t.taskTodos && t.taskTodos.length > 0) {
+                    return t.id;
+                  }
+                }
+                return null;
+              })();
 
-            const lastAssistantSegment = [...turn.segments]
-              .reverse()
-              .find((s) => s.type === 'assistant_text');
-
-            return (
-              <div
-                key={turn.id}
-                className={`space-y-2 ${turnIdx > 0 ? 'pt-7' : 'pt-1'}`}
-                style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
-              >
-                {/* 1. User Message Card */}
-                {turn.userMessage && (
-                  <MessageItem
-                    message={turn.userMessage}
-                    workdir={currentProject?.workdir_path}
+              return turns.map((turn, turnIdx) => {
+                const isLastTurn = turnIdx === turns.length - 1;
+                const isThisTurnStreaming = isLastTurn && isStreaming;
+                const diffCardNode = !isThisTurnStreaming && turn.turnChanges ? (
+                  <TurnDiffCard
+                    changes={turn.turnChanges}
                     onOpenFileDiff={onOpenFileDiff}
                     onOpenFile={onOpenFile}
-                    onOpenBrowser={onOpenBrowser}
+                    onOpenReview={onOpenReview}
+                    className="pt-2 pb-1 select-none"
                   />
-                )}
+                ) : null;
 
-                {/* 2. Interleaved Segments (Historical & Committed in this turn) */}
-                {turn.segments.map((seg) => {
-                  if (seg.type === 'work_block' && seg.steps && seg.steps.length > 0) {
-                    return (
-                      <div key={seg.id} className={`${chatWidthClass} mx-auto w-full px-4`}>
-                        <WorkBlock
-                          introMessage={seg.introMessage}
-                          steps={seg.steps}
-                          durationMs={seg.durationMs}
-                          isStreaming={false}
-                          onOpenFileDiff={onOpenFileDiff}
-                          onOpenFile={onOpenFile}
-                          onOpenBrowser={onOpenBrowser}
-                          verbose={verboseChat}
-                        />
-                      </div>
-                    );
-                  }
+                const lastAssistantSegment = [...turn.segments]
+                  .reverse()
+                  .find((s) => s.type === 'assistant_text');
 
-                  if (seg.type === 'assistant_text' && seg.message) {
-                    const isLastAssistant = seg === lastAssistantSegment;
-                    const isEndOfTurn = isLastAssistant && !isThisTurnStreaming;
-                    const fullTurnAssistantContent = isEndOfTurn
-                      ? turn.segments
-                          .filter((s) => s.type === 'assistant_text')
-                          .map((s) => s.message?.content)
-                          .filter(Boolean)
-                          .join('\n\n')
-                      : undefined;
-
-                    const hasGroupedActivity = turn.segments.some(
-                      (s) => s.type === 'work_block' && s.steps && s.steps.length > 0
-                    );
-
-                    return (
+                return (
+                  <div
+                    key={turn.id}
+                    className={`space-y-2 ${turnIdx > 0 ? 'pt-7' : 'pt-1'}`}
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
+                  >
+                    {/* 1. User Message Card */}
+                    {turn.userMessage && (
                       <MessageItem
-                        key={seg.id}
-                        message={seg.message}
-                        hasGroupedActivity={hasGroupedActivity}
+                        message={turn.userMessage}
                         workdir={currentProject?.workdir_path}
                         onOpenFileDiff={onOpenFileDiff}
                         onOpenFile={onOpenFile}
                         onOpenBrowser={onOpenBrowser}
-                        footerCard={isEndOfTurn ? diffCardNode : undefined}
-                        showFooterActions={isEndOfTurn}
-                        copyText={fullTurnAssistantContent}
-                        onApprovePlan={onApprovePlan}
-                        onRejectPlan={onRejectPlan}
                       />
-                    );
-                  }
-
-                  return null;
-                })}
-
-                {/* 3. Live Active Elements for the Current Streaming Turn */}
-                {isThisTurnStreaming && (
-                  <>
-                    {/* Live Work Block: shows running tools, streaming reasoning, or initial spinner */}
-                    {(streamingReasoning ||
-                      liveToolMessages.length > 0 ||
-                      (!streamingContent &&
-                        (turn.segments.length === 0 ||
-                          turn.segments[turn.segments.length - 1].type === 'assistant_text'))) && (
-                      <div className={`${chatWidthClass} mx-auto w-full px-4`}>
-                        <WorkBlock
-                          steps={[
-                            ...(streamingReasoning
-                              ? [
-                                  {
-                                    id: 'step_live_reasoning',
-                                    type: 'thought' as const,
-                                    reasoning: streamingReasoning,
-                                    durationSeconds: 1,
-                                  },
-                                ]
-                              : []),
-                            ...liveToolMessages.map((m) => ({
-                              id: `step_${m.id}`,
-                              type: 'tool' as const,
-                              toolMessage: m,
-                            })),
-                          ]}
-                          isStreaming={true}
-                          onOpenFileDiff={onOpenFileDiff}
-                          onOpenFile={onOpenFile}
-                          onOpenBrowser={onOpenBrowser}
-                          verbose={verboseChat}
-                        />
-                      </div>
                     )}
+
+                    {/* 2. Interleaved Segments (Historical & Committed in this turn) */}
+                    {(() => {
+                      const shouldRenderTurnTodos = turn.id === latestTurnWithTodosId;
+                      const effectiveTodos = isThisTurnStreaming && liveTodos ? liveTodos : turn.taskTodos;
+                      const hasTodos = Boolean(shouldRenderTurnTodos && effectiveTodos && effectiveTodos.length > 0);
+                      const lastWorkBlockIdx = turn.segments.map((s) => s.type).lastIndexOf('work_block');
+                      let hasRenderedTodos = false;
+
+                      return (
+                        <>
+                          {turn.segments.map((seg, segIdx) => {
+                            if (seg.type === 'work_block' && seg.steps && seg.steps.length > 0) {
+                              const isLastWork = segIdx === lastWorkBlockIdx;
+                              return (
+                                <React.Fragment key={seg.id}>
+                                  <div className={`${chatWidthClass} mx-auto w-full px-4`}>
+                                    <WorkBlock
+                                      introMessage={seg.introMessage}
+                                      steps={seg.steps}
+                                      durationMs={seg.durationMs}
+                                      isStreaming={false}
+                                      onOpenFileDiff={onOpenFileDiff}
+                                      onOpenFile={onOpenFile}
+                                      onOpenBrowser={onOpenBrowser}
+                                      verbose={verboseChat}
+                                    />
+                                  </div>
+
+                                  {/* Task List Accordion Card — placed strictly UNDER Worked for */}
+                                  {!isThisTurnStreaming && hasTodos && isLastWork && (
+                                    (() => {
+                                      hasRenderedTodos = true;
+                                      return (
+                                        <div className={`${chatWidthClass} mx-auto w-full px-4 pt-0.5 pb-1`}>
+                                          <TodoCard todos={effectiveTodos!} title="Task List" isStreaming={false} />
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+                                </React.Fragment>
+                              );
+                            }
+
+                            if (seg.type === 'assistant_text' && seg.message) {
+                              const isLastAssistant = seg === lastAssistantSegment;
+                              const isEndOfTurn = isLastAssistant && !isThisTurnStreaming;
+                              const fullTurnAssistantContent = isEndOfTurn
+                                ? turn.segments
+                                    .filter((s) => s.type === 'assistant_text')
+                                    .map((s) => s.message?.content)
+                                    .filter(Boolean)
+                                    .join('\n\n')
+                                : undefined;
+
+                              const hasGroupedActivity = turn.segments.some(
+                                (s) => s.type === 'work_block' && s.steps && s.steps.length > 0
+                              );
+
+                              return (
+                                <React.Fragment key={seg.id}>
+                                  {/* Fallback Task List if turn has no work_block */}
+                                  {!isThisTurnStreaming && hasTodos && !hasRenderedTodos && (
+                                    (() => {
+                                      hasRenderedTodos = true;
+                                      return (
+                                        <div className={`${chatWidthClass} mx-auto w-full px-4 pt-0.5 pb-1`}>
+                                          <TodoCard todos={effectiveTodos!} title="Task List" isStreaming={false} />
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+
+                                  <MessageItem
+                                    message={seg.message}
+                                    hasGroupedActivity={hasGroupedActivity}
+                                    workdir={currentProject?.workdir_path}
+                                    onOpenFileDiff={onOpenFileDiff}
+                                    onOpenFile={onOpenFile}
+                                    onOpenBrowser={onOpenBrowser}
+                                    footerCard={isEndOfTurn ? diffCardNode : undefined}
+                                    showFooterActions={isEndOfTurn}
+                                    copyText={fullTurnAssistantContent}
+                                    onApprovePlan={onApprovePlan}
+                                    onRejectPlan={onRejectPlan}
+                                  />
+                                </React.Fragment>
+                              );
+                            }
+
+                            return null;
+                          })}
+
+                          {/* Fallback Task List if turn had no segments rendered */}
+                          {!isThisTurnStreaming && hasTodos && !hasRenderedTodos && (
+                            <div className={`${chatWidthClass} mx-auto w-full px-4 pt-0.5 pb-1`}>
+                              <TodoCard todos={effectiveTodos!} title="Task List" isStreaming={false} />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+
+                    {/* 3. Live Active Elements for the Current Streaming Turn */}
+                    {isThisTurnStreaming && (
+                      <>
+                        {/* Live Work Block: shows running tools, streaming reasoning, or initial spinner */}
+                        {(streamingReasoning ||
+                          filteredLiveToolMessages.length > 0 ||
+                          (!streamingContent &&
+                            (turn.segments.length === 0 ||
+                              turn.segments[turn.segments.length - 1].type === 'assistant_text'))) && (
+                          <div className={`${chatWidthClass} mx-auto w-full px-4`}>
+                            <WorkBlock
+                              steps={[
+                                ...(streamingReasoning
+                                  ? [
+                                      {
+                                        id: 'step_live_reasoning',
+                                        type: 'thought' as const,
+                                        reasoning: streamingReasoning,
+                                        durationSeconds: 1,
+                                      },
+                                    ]
+                                  : []),
+                                ...filteredLiveToolMessages.map((m) => ({
+                                  id: `step_${m.id}`,
+                                  type: 'tool' as const,
+                                  toolMessage: m,
+                                })),
+                              ]}
+                              isStreaming={true}
+                              onOpenFileDiff={onOpenFileDiff}
+                              onOpenFile={onOpenFile}
+                              onOpenBrowser={onOpenBrowser}
+                              verbose={verboseChat}
+                            />
+                          </div>
+                        )}
+
+                        {/* Live Task List Accordion Card — placed strictly UNDER live Worked for */}
+                        {isThisTurnStreaming && turn.id === latestTurnWithTodosId && liveTodos && liveTodos.length > 0 && (
+                          <div className={`${chatWidthClass} mx-auto w-full px-4 pt-0.5 pb-1`}>
+                            <TodoCard todos={liveTodos} title="Task List" isStreaming={true} />
+                          </div>
+                        )}
 
                     {/* Live Streaming Assistant Message or Plan Indicator */}
                     {streamingContent && (
@@ -685,7 +817,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 })()}
               </div>
             );
-          })}
+          });
+        })()}
           </>
         )}
 
@@ -693,12 +826,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         {isStreaming && turns.length === 0 && (
           <div className="space-y-1">
             {/* Live Streaming Thought / Activity directly inside chat */}
-            {(streamingReasoning || liveToolMessages.length > 0 || !streamingContent) && (
+            {(streamingReasoning || filteredLiveToolMessages.length > 0 || !streamingContent) && (
               <div className={`${chatWidthClass} mx-auto w-full px-4`}>
                 <WorkBlock
                   steps={
                     liveToolMessages.length > 0
-                      ? liveToolMessages.map((m) => ({
+                      ? filteredLiveToolMessages.map((m) => ({
                           id: `step_${m.id}`,
                           type: 'tool' as const,
                           toolMessage: m,
@@ -720,6 +853,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   onOpenBrowser={onOpenBrowser}
                   verbose={verboseChat}
                 />
+              </div>
+            )}
+            {liveTodos && liveTodos.length > 0 && (
+              <div className={`${chatWidthClass} mx-auto w-full px-4 pt-0.5 pb-1`}>
+                <TodoCard todos={liveTodos} title="Task List" isStreaming={true} />
               </div>
             )}
 

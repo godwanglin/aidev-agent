@@ -322,6 +322,31 @@ function setupIpcHandlers(): void {
       shell.openExternal(url);
     }
   });
+
+  ipcMain.on('window-toggle-devtools', () => {
+    mainWindow?.webContents.toggleDevTools();
+  });
+
+  ipcMain.on('window-toggle-fullscreen', () => {
+    if (!mainWindow) return;
+    mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  });
+
+  ipcMain.on('window-zoom-in', () => {
+    if (!mainWindow) return;
+    const current = mainWindow.webContents.getZoomLevel();
+    mainWindow.webContents.setZoomLevel(Math.min(current + 0.5, 3));
+  });
+
+  ipcMain.on('window-zoom-out', () => {
+    if (!mainWindow) return;
+    const current = mainWindow.webContents.getZoomLevel();
+    mainWindow.webContents.setZoomLevel(Math.max(current - 0.5, -2));
+  });
+
+  ipcMain.on('window-reset-zoom', () => {
+    mainWindow?.webContents.setZoomLevel(0);
+  });
 }
 
 // Single instance lock (prevent multiple running desktop instances)

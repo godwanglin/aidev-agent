@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { spawn, ChildProcess } from 'child_process';
 import { getStoragePaths, getChatStorage, ensureChatStorageInitialized, loadSettings } from './storage';
 import { taskRepo, BackgroundTaskRecord, sessionRepo } from './db';
@@ -98,22 +99,52 @@ class TaskManager {
 
     const settings = loadSettings();
     const isWindows = process.platform === 'win32';
+    const chosenShell = (settings.defaultShell || (isWindows ? 'powershell' : 'bash')).toLowerCase();
+
     let shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
     let shellArgs = isWindows ? ['/d', '/s', '/c', effectiveCommand] : ['-c', effectiveCommand];
 
-    if (isWindows && settings.defaultShell === 'powershell') {
-      shell = 'powershell.exe';
-      shellArgs = ['-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', effectiveCommand];
-    } else if (isWindows && settings.defaultShell === 'bash') {
-      shell = 'bash.exe';
-      shellArgs = ['-c', effectiveCommand];
+    if (isWindows) {
+      if (chosenShell === 'powershell') {
+        shell = 'powershell.exe';
+        shellArgs = ['-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', effectiveCommand];
+      } else if (chosenShell === 'bash') {
+        shell = 'bash.exe';
+        shellArgs = ['-c', effectiveCommand];
+      }
+    } else {
+      if (chosenShell === 'zsh') {
+        shell = '/bin/zsh';
+        shellArgs = ['-c', effectiveCommand];
+      } else if (chosenShell === 'fish') {
+        shell = 'fish';
+        shellArgs = ['-c', effectiveCommand];
+      } else if (chosenShell === 'bash') {
+        shell = '/bin/bash';
+        shellArgs = ['-c', effectiveCommand];
+      } else {
+        shell = process.env.SHELL || '/bin/sh';
+        shellArgs = ['-c', effectiveCommand];
+      }
+    }
+
+    let safeWorkdir = params.workdir || process.cwd();
+    if (!fs.existsSync(safeWorkdir)) {
+      try {
+        fs.mkdirSync(safeWorkdir, { recursive: true });
+      } catch {
+        safeWorkdir = process.env.USERPROFILE || process.env.HOME || os.homedir() || process.cwd();
+      }
+    }
+    if (!fs.existsSync(safeWorkdir)) {
+      safeWorkdir = process.cwd();
     }
 
     // NOTE: Do NOT use detached: true on Windows, as Node's libuv passes CREATE_NEW_CONSOLE
     // which causes an external Windows Terminal / cmd window to pop up on user's desktop!
     // windowsHide: true with detached: false ensures the process runs completely hidden/headless.
     const child = spawn(shell, shellArgs, {
-      cwd: params.workdir,
+      cwd: safeWorkdir,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
@@ -128,7 +159,7 @@ class TaskManager {
       session_id: params.sessionId,
       project_id: params.projectId,
       command: params.command,
-      workdir: params.workdir,
+      workdir: safeWorkdir,
       status: 'RUNNING',
       pid: child.pid,
       log_path: logPath,

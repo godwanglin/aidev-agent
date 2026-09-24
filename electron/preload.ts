@@ -24,6 +24,11 @@ export interface ElectronAPI {
   checkForUpdates: () => void;
   downloadUpdate: () => void;
   quitAndInstall: () => void;
+  toggleDevTools: () => void;
+  toggleFullScreen: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
   onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void;
   onOpenProjectPath: (callback: (projectPath: string) => void) => () => void;
 }
@@ -36,6 +41,12 @@ const electronAPI: ElectronAPI = {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+
+  toggleDevTools: () => ipcRenderer.send('window-toggle-devtools'),
+  toggleFullScreen: () => ipcRenderer.send('window-toggle-fullscreen'),
+  zoomIn: () => ipcRenderer.send('window-zoom-in'),
+  zoomOut: () => ipcRenderer.send('window-zoom-out'),
+  resetZoom: () => ipcRenderer.send('window-reset-zoom'),
 
   onMaximizeChange: (callback: (isMax: boolean) => void) => {
     const handler = (_event: any, isMax: boolean) => callback(isMax);

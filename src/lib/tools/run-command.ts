@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { isCommandBlacklisted } from '../security';
 import { logCommand, loadSettings } from '../storage';
 import { taskManager, cleanBackgroundCommand } from '../task-manager';
@@ -66,13 +67,25 @@ export async function executeRunCommand(
 
   const startTime = Date.now();
 
+  let safeWorkdir = workdir || process.cwd();
+  if (!fs.existsSync(safeWorkdir)) {
+    try {
+      fs.mkdirSync(safeWorkdir, { recursive: true });
+    } catch {
+      safeWorkdir = process.env.USERPROFILE || process.env.HOME || os.homedir() || process.cwd();
+    }
+  }
+  if (!fs.existsSync(safeWorkdir)) {
+    safeWorkdir = process.cwd();
+  }
+
   // If command should run in background (dev servers, long tasks, or explicit background)
   if (shouldRunInBackground(params.command, params.background || params.isBackground)) {
     try {
       const cleanCmd = cleanBackgroundCommand(params.command);
       const task = await taskManager.startTask({
         command: cleanCmd,
-        workdir,
+        workdir: safeWorkdir,
         sessionId,
       });
 
@@ -97,15 +110,33 @@ export async function executeRunCommand(
   const settings = loadSettings();
   const timeoutMs = params.timeoutMs || (settings.commandTimeout ? settings.commandTimeout * 1000 : 120000);
   const isWindows = process.platform === 'win32';
+  const chosenShell = (settings.defaultShell || (isWindows ? 'powershell' : 'bash')).toLowerCase();
+
   let shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
   let shellArgs = isWindows ? ['/d', '/s', '/c', params.command] : ['-c', params.command];
 
-  if (isWindows && settings.defaultShell === 'powershell') {
-    shell = 'powershell.exe';
-    shellArgs = ['-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', params.command];
-  } else if (isWindows && settings.defaultShell === 'bash') {
-    shell = 'bash.exe';
-    shellArgs = ['-c', params.command];
+  if (isWindows) {
+    if (chosenShell === 'powershell') {
+      shell = 'powershell.exe';
+      shellArgs = ['-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', params.command];
+    } else if (chosenShell === 'bash') {
+      shell = 'bash.exe';
+      shellArgs = ['-c', params.command];
+    }
+  } else {
+    if (chosenShell === 'zsh') {
+      shell = '/bin/zsh';
+      shellArgs = ['-c', params.command];
+    } else if (chosenShell === 'fish') {
+      shell = 'fish';
+      shellArgs = ['-c', params.command];
+    } else if (chosenShell === 'bash') {
+      shell = '/bin/bash';
+      shellArgs = ['-c', params.command];
+    } else {
+      shell = process.env.SHELL || '/bin/sh';
+      shellArgs = ['-c', params.command];
+    }
   }
 
   return new Promise((resolve, reject) => {
@@ -151,7 +182,7 @@ export async function executeRunCommand(
       : process.env.NODE_PATH;
 
     const child = spawn(shell, shellArgs, {
-      cwd: workdir,
+      cwd: safeWorkdir,
       windowsHide: true,
       env: {
         ...process.env,

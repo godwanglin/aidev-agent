@@ -12,8 +12,8 @@ export async function GET(req: Request) {
     const workdir = searchParams.get('workdir');
     const relativePath = searchParams.get('path');
 
-    if (!workdir || !relativePath) {
-      return NextResponse.json({ error: 'workdir and path are required' }, { status: 400 });
+    if (!relativePath) {
+      return NextResponse.json({ error: 'path is required' }, { status: 400 });
     }
 
     const homeDir = process.env.USERPROFILE || process.env.HOME || '';
@@ -24,17 +24,19 @@ export async function GET(req: Request) {
       relativePath.startsWith('artifact:') ||
       relativePath.startsWith('artifacts/') ||
       relativePath === 'walkthrough.md' ||
-      relativePath === 'implementation_plan.md';
+      relativePath === 'implementation_plan.md' ||
+      /\.(md|html|txt|json)$/i.test(relativePath);
 
     if (sessionId && isArtifactRequested) {
       const cleanName = path.basename(relativePath.replace(/^artifact:\/\/?/, ''));
       const session = sessionRepo.getById(sessionId);
-      const projectId = session?.project_id || 'default';
+      const projectId = session?.project_id || 'no_project';
       const chatStorage = getChatStorage(projectId, sessionId);
 
       const candidateArtifactPaths = [
         path.join(chatStorage.artifacts, cleanName),
         path.join(homeDir, '.aidev', 'sessions', sessionId, 'artifacts', cleanName),
+        path.join(homeDir, '.aidev', 'sandbox', 'generated', sessionId, 'artifacts', cleanName),
       ];
 
       for (const aPath of candidateArtifactPaths) {
@@ -55,28 +57,52 @@ export async function GET(req: Request) {
       try {
         const cleanName = path.basename(relativePath);
         const session = sessionRepo.getById(sessionId);
-        const projectId = session?.project_id || 'default';
+        const projectId = session?.project_id || 'no_project';
         const chatStorage = getChatStorage(projectId, sessionId);
-        const directArtifactPath = path.join(chatStorage.artifacts, cleanName);
-        if (fs.existsSync(directArtifactPath)) {
-          let existsInWorkspace = false;
-          try {
-            const wsPath = sanitizeAndResolvePath(workdir, relativePath, true);
-            existsInWorkspace = fs.existsSync(wsPath);
-          } catch {}
+        const candidateArtifactPaths = [
+          path.join(chatStorage.artifacts, cleanName),
+          path.join(homeDir, '.aidev', 'sandbox', 'generated', sessionId, 'artifacts', cleanName),
+        ];
 
-          if (!existsInWorkspace) {
-            const stat = fs.statSync(directArtifactPath);
-            if (stat.isFile()) {
-              const content = fs.readFileSync(directArtifactPath, 'utf-8');
-              return NextResponse.json({ path: relativePath, content, size: stat.size });
+        for (const directArtifactPath of candidateArtifactPaths) {
+          if (fs.existsSync(directArtifactPath)) {
+            let existsInWorkspace = false;
+            if (workdir) {
+              try {
+                const wsPath = sanitizeAndResolvePath(workdir, relativePath, true);
+                existsInWorkspace = fs.existsSync(wsPath);
+              } catch {}
+            }
+
+            if (!existsInWorkspace) {
+              const stat = fs.statSync(directArtifactPath);
+              if (stat.isFile()) {
+                const content = fs.readFileSync(directArtifactPath, 'utf-8');
+                return NextResponse.json({ path: relativePath, content, size: stat.size });
+              }
             }
           }
         }
       } catch {}
     }
 
-    // 3. Resolve within active workspace directory, global skills, or any registered project
+    // 3. If relativePath is actually an existing absolute path on disk, serve it directly
+    const directAbsPath = path.resolve(relativePath.replace(/^file:\/\/\/?/i, ''));
+    if (fs.existsSync(directAbsPath)) {
+      try {
+        const stat = fs.statSync(directAbsPath);
+        if (stat.isFile()) {
+          const content = fs.readFileSync(directAbsPath, 'utf-8');
+          return NextResponse.json({ path: relativePath, content, size: stat.size });
+        }
+      } catch {}
+    }
+
+    if (!workdir) {
+      return NextResponse.json({ error: 'workdir and path are required' }, { status: 400 });
+    }
+
+    // 4. Resolve within active workspace directory, global skills, or any registered project
     let resolved = '';
     try {
       resolved = sanitizeAndResolvePath(workdir, relativePath, true);

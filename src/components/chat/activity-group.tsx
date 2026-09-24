@@ -24,6 +24,7 @@ export interface ActivityGroupProps {
   onOpenFile?: (filePath: string, lineRange?: { startLine?: number; endLine?: number }) => void;
   onOpenBrowser?: (url: string) => void;
   verbose?: boolean;
+  latestUpdateTodosId?: string | null;
 }
 
 export function computeSummary(steps: TurnStep[], isStreaming: boolean = false): string {
@@ -135,6 +136,7 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
   onOpenFile,
   onOpenBrowser,
   verbose = true,
+  latestUpdateTodosId,
 }) => {
   // Normalize steps if not explicitly provided
   const normalizedSteps: TurnStep[] = React.useMemo(() => {
@@ -161,6 +163,20 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
     return list;
   }, [explicitSteps, toolMessages, reasoningContent]);
 
+  // Identify latest update_todos id so older/stale progress cards are hidden
+  const effectiveLatestTodoId = React.useMemo(() => {
+    if (latestUpdateTodosId !== undefined) {
+      return latestUpdateTodosId;
+    }
+    for (let i = normalizedSteps.length - 1; i >= 0; i--) {
+      const step = normalizedSteps[i];
+      if (step.type === 'tool' && step.toolMessage?.tool_name === 'update_todos') {
+        return step.toolMessage.id;
+      }
+    }
+    return null;
+  }, [latestUpdateTodosId, normalizedSteps]);
+
   // Open by default while streaming only if verbose is true; collapsed otherwise
   const [isOpen, setIsOpen] = useState((isStreaming && verbose) || (verbose && !hideHeader));
 
@@ -185,6 +201,11 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
           }
 
           if (step.type === 'tool' && step.toolMessage) {
+            const lowerTool = (step.toolMessage.tool_name || '').toLowerCase();
+            if (['update_todos', 'update_todo', 'todo_write', 'manage_tasks', 'todos', 'tasks'].includes(lowerTool)) {
+              return null;
+            }
+
             return (
               <ToolRow
                 key={step.id}
@@ -249,6 +270,11 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
             }
 
             if (step.type === 'tool' && step.toolMessage) {
+              const lowerTool = (step.toolMessage.tool_name || '').toLowerCase();
+              if (['update_todos', 'update_todo', 'todo_write', 'manage_tasks', 'todos', 'tasks'].includes(lowerTool)) {
+                return null;
+              }
+
               return (
                 <ToolRow
                   key={step.id}

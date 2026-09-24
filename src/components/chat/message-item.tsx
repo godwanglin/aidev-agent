@@ -107,8 +107,10 @@ export function parseFilePathInfo(str: string, isFromCodeTag = false): {
   if (/^https?:\/\//i.test(raw)) return { isFile: false, path: '' };
 
   // Strip file:// protocol if present
+  let hasExplicitProtocol = false;
   if (raw.startsWith('file:///')) {
     raw = raw.replace(/^file:\/\/\/?/, '');
+    hasExplicitProtocol = true;
   }
 
   // Strip leading @ if it's a mention
@@ -135,7 +137,11 @@ export function parseFilePathInfo(str: string, isFromCodeTag = false): {
 
   // Check known dotfiles (.gitignore, .env, etc.)
   if (/^\.(gitignore|env(\.[\w.-]+)?|prettierrc(\.[\w.-]+)?|eslintrc(\.[\w.-]+)?|editorconfig|npmrc|dockerignore)$/i.test(raw)) {
-    return { isFile: true, path: raw, lineRange };
+    const hasPath = raw.includes('/') || raw.includes('\\');
+    if (hasPath || hasAtPrefix || hasExplicitProtocol || Boolean(lineRange)) {
+      return { isFile: true, path: raw, lineRange };
+    }
+    return { isFile: false, path: '' };
   }
 
   // Check file extension
@@ -145,20 +151,24 @@ export function parseFilePathInfo(str: string, isFromCodeTag = false): {
   const ext = extMatch[1].toLowerCase();
   if (!KNOWN_EXTENSIONS.has(ext)) return { isFile: false, path: '' };
 
-  // Ignore popular frameworks and brand names that end with .js or domains
   const cleanName = raw.split(/[/\\]/).pop() || raw;
+  const dotIndex = cleanName.lastIndexOf('.');
+  // Reject bare extensions like ".html", ".ts", ".css" with no filename before the dot
+  if (dotIndex <= 0) {
+    return { isFile: false, path: '' };
+  }
+
+  // Ignore popular frameworks and brand names that end with .js or domains
   if (FRAMEWORK_AND_TECH_IGNORELIST.has(cleanName.toLowerCase())) {
     return { isFile: false, path: '' };
   }
 
   const hasPathSeparator = raw.includes('/') || raw.includes('\\');
-  // Qualify as a file chip if it has path separators, @ mention prefix, explicit line numbers, or comes from a markdown code backtick
-  if (hasPathSeparator || hasAtPrefix || Boolean(lineRange) || isFromCodeTag) {
-    return { isFile: true, path: raw, lineRange };
-  }
 
-  // Qualify well-known root configuration files even if mentioned without path
-  if (WELL_KNOWN_ROOT_FILES.has(cleanName.toLowerCase())) {
+  // STRICT RULE: Only qualify as a file chip if it has a real path (e.g. "src/foo.ts", "./server.mjs"),
+  // an @ mention prefix ("@package.json"), file protocol ("file:///..."), or explicit line numbers ("file.ts:20").
+  // Bare filenames like "SKILL.md", "index.html", or "package.json" without path will be rendered as clean code/text.
+  if (hasPathSeparator || hasAtPrefix || hasExplicitProtocol || Boolean(lineRange)) {
     return { isFile: true, path: raw, lineRange };
   }
 
@@ -567,6 +577,7 @@ interface MessageItemProps {
   showFooterActions?: boolean;
   copyText?: string;
   workdir?: string;
+  latestUpdateTodosId?: string | null;
 }
 
 export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
@@ -581,6 +592,7 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
   showFooterActions = true,
   copyText,
   workdir,
+  latestUpdateTodosId,
 }) {
   const [copied, setCopied] = useState(false);
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<{
@@ -664,6 +676,11 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
 
   // 1. Tool Message
   if (isTool) {
+    const lowerTool = (message.tool_name || '').toLowerCase();
+    if (['update_todos', 'update_todo', 'todo_write', 'manage_tasks', 'todos', 'tasks'].includes(lowerTool)) {
+      return null;
+    }
+
     return (
       <div className={`${chatWidthClass} mx-auto w-full px-4 py-0.5`}>
         <ToolRow

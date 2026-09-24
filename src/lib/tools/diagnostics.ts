@@ -47,17 +47,29 @@ export interface FindReferencesResult {
 }
 
 function loadTypeScript(workdir?: string): any | null {
+  const getRequire = (): any => {
+    try {
+      if (typeof (globalThis as any).__non_webpack_require__ !== 'undefined') {
+        return (globalThis as any).__non_webpack_require__;
+      }
+      return eval('require');
+    } catch {
+      return null;
+    }
+  };
+
+  const req = getRequire();
+  if (!req) return null;
+
   if (workdir) {
     try {
       const localTsPath = path.join(workdir, 'node_modules', 'typescript');
       if (fs.existsSync(localTsPath)) {
-        const req = typeof __non_webpack_require__ !== 'undefined' ? __non_webpack_require__ : eval('require');
         return req(localTsPath);
       }
     } catch {}
   }
   try {
-    const req = typeof __non_webpack_require__ !== 'undefined' ? __non_webpack_require__ : eval('require');
     return req('typescript');
   } catch {}
   return null;

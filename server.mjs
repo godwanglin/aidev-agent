@@ -7,6 +7,22 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, execSync, spawnSync } from 'child_process';
 import url, { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
+import os from 'os';
+
+function getAidevHome() {
+  const home = process.env.USERPROFILE || process.env.HOME || os.homedir() || process.cwd();
+  return path.join(home, '.aidev');
+}
+
+function getSavedSettings() {
+  try {
+    const settingsPath = path.join(getAidevHome(), 'config', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    }
+  } catch {}
+  return {};
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,7 +91,22 @@ function setupTerminalWebSocket(wss) {
     }
 
     const sessionId = parsedUrl.query.sessionId || `term_${Date.now()}`;
-    const workdir = parsedUrl.query.workdir || process.cwd();
+    const rawWorkdir = parsedUrl.query.workdir || process.cwd();
+    let safeWorkdir = rawWorkdir;
+    let workdirFallbackUsed = false;
+
+    if (!fs.existsSync(safeWorkdir)) {
+      try {
+        fs.mkdirSync(safeWorkdir, { recursive: true });
+      } catch {
+        safeWorkdir = process.env.USERPROFILE || process.env.HOME || os.homedir() || process.cwd();
+        workdirFallbackUsed = true;
+      }
+    }
+    if (!fs.existsSync(safeWorkdir)) {
+      safeWorkdir = process.cwd();
+      workdirFallbackUsed = true;
+    }
 
     const existing = activeTerminals.get(sessionId);
 
@@ -123,14 +154,47 @@ function setupTerminalWebSocket(wss) {
     }
 
     const isWindows = process.platform === 'win32';
-    const shell = isWindows
-      ? process.env.SHELL || 'powershell.exe'
-      : process.env.SHELL || '/bin/bash';
-    const shellArgs = shell.toLowerCase().includes('powershell')
-      ? ['-NoLogo']
-      : isWindows && shell.toLowerCase().includes('cmd')
-      ? ['/Q']
-      : ['-i'];
+    const settings = getSavedSettings();
+    const chosenShell = (settings.defaultShell || (isWindows ? 'powershell' : 'bash')).toLowerCase();
+
+    let shell;
+    let shellArgs;
+
+    if (isWindows) {
+      if (chosenShell === 'cmd') {
+        shell = process.env.COMSPEC || 'cmd.exe';
+        shellArgs = ['/Q'];
+      } else if (chosenShell === 'bash') {
+        shell = 'bash.exe';
+        shellArgs = ['-i'];
+      } else {
+        // default powershell
+        shell = process.env.SHELL && process.env.SHELL.toLowerCase().includes('powershell')
+          ? process.env.SHELL
+          : 'powershell.exe';
+        shellArgs = ['-NoLogo'];
+      }
+    } else {
+      // Linux / macOS
+      if (chosenShell === 'zsh') {
+        shell = '/bin/zsh';
+        shellArgs = ['-i'];
+      } else if (chosenShell === 'sh') {
+        shell = '/bin/sh';
+        shellArgs = ['-i'];
+      } else if (chosenShell === 'fish') {
+        shell = 'fish';
+        shellArgs = ['-i'];
+      } else {
+        // default bash
+        shell = process.env.SHELL || '/bin/bash';
+        shellArgs = ['-i'];
+      }
+    }
+
+    const fallbackNotice = (workdirFallbackUsed || safeWorkdir !== rawWorkdir)
+      ? `\r\n\x1b[33m[Aidev Terminal] Notice: Project directory "${rawWorkdir}" does not exist on disk.\x1b[0m\r\n\x1b[36m-> Fallback working directory: "${safeWorkdir}"\x1b[0m\r\n\r\n`
+      : '';
 
     let termSession;
 
@@ -141,12 +205,13 @@ function setupTerminalWebSocket(wss) {
           name: 'xterm-256color',
           cols: 80,
           rows: 24,
-          cwd: workdir,
+          cwd: safeWorkdir,
           env: {
             ...process.env,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
           },
+          ...(isWindows ? { useConpty: false } : {}),
         });
       } catch (err) {
         if (isWindows && shell !== 'cmd.exe') {
@@ -155,7 +220,26 @@ function setupTerminalWebSocket(wss) {
               name: 'xterm-256color',
               cols: 80,
               rows: 24,
-              cwd: workdir,
+              cwd: safeWorkdir,
+              env: {
+                ...process.env,
+                TERM: 'xterm-256color',
+                COLORTERM: 'truecolor',
+              },
+              useConpty: false,
+            });
+          } catch (err2) {
+            ws.send(JSON.stringify({ type: 'output', data: `\r\nFailed to spawn terminal: ${err2.message}\r\n` }));
+            ws.close();
+            return;
+          }
+        } else if (!isWindows && shell !== '/bin/sh') {
+          try {
+            ptyProc = nodePty.spawn('/bin/sh', ['-i'], {
+              name: 'xterm-256color',
+              cols: 80,
+              rows: 24,
+              cwd: safeWorkdir,
               env: {
                 ...process.env,
                 TERM: 'xterm-256color',
@@ -180,7 +264,7 @@ function setupTerminalWebSocket(wss) {
         id: sessionId,
         process: ptyProc,
         ws,
-        workdir,
+        workdir: safeWorkdir,
         buffer: '',
         disconnectTimer: null,
         isAlive: () => !isExited,
@@ -223,6 +307,10 @@ function setupTerminalWebSocket(wss) {
         }
       };
 
+      if (fallbackNotice) {
+        sendOutput(fallbackNotice);
+      }
+
       ptyProc.onData((data) => {
         sendOutput(data);
       });
@@ -237,13 +325,13 @@ function setupTerminalWebSocket(wss) {
       });
     } else {
       // Fallback: child_process.spawn with process-tree SIGINT / taskkill
-      const fallbackShell = isWindows ? process.env.COMSPEC || 'cmd.exe' : process.env.SHELL || '/bin/bash';
-      const fallbackArgs = isWindows ? ['/Q'] : ['--noediting', '-i'];
+      const fallbackShell = isWindows ? process.env.COMSPEC || 'cmd.exe' : (shell || '/bin/bash');
+      const fallbackArgs = isWindows ? ['/Q'] : (shellArgs || ['--noediting', '-i']);
 
       let child;
       try {
         child = spawn(fallbackShell, fallbackArgs, {
-          cwd: workdir,
+          cwd: safeWorkdir,
           env: {
             ...process.env,
             TERM: 'xterm-256color',
@@ -272,7 +360,7 @@ function setupTerminalWebSocket(wss) {
         id: sessionId,
         process: child,
         ws,
-        workdir,
+        workdir: safeWorkdir,
         buffer: '',
         lineBuffer: '',
         history: [],
@@ -339,6 +427,10 @@ function setupTerminalWebSocket(wss) {
           termSession.ws.send(JSON.stringify({ type: 'output', data: cleanData }));
         }
       };
+
+      if (fallbackNotice) {
+        sendOutput(fallbackNotice);
+      }
 
       child.stdout.on('data', (data) => {
         sendOutput(data.toString('utf-8'));

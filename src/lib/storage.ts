@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: AidevSettings = {
   theme: 'dark',
   maxTokensPerTurn: 4096,
   responseLanguage: 'auto',
-  defaultShell: 'powershell',
+  defaultShell: process.platform === 'win32' ? 'powershell' : 'bash',
   reasoningEffort: 'high',
   soundNotifications: true,
   autoScrollStreaming: true,
@@ -191,6 +191,9 @@ export function loadSettings(): AidevSettings {
       if (settings.permissionPreset === 'ask') settings.permissionMode = 'ASK';
       else if (settings.permissionPreset === 'full') settings.permissionMode = 'FULL_ACCESS';
       else settings.permissionMode = 'AUTO';
+    }
+    if (process.platform !== 'win32' && (settings.defaultShell === 'powershell' || settings.defaultShell === 'cmd')) {
+      settings.defaultShell = 'bash';
     }
     return settings;
   } catch {

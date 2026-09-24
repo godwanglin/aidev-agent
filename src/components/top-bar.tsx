@@ -38,11 +38,10 @@ export const TopBar: React.FC<WindowTitleBarProps> = ({
     setIsElectron(isElectronEnvironment());
   }, []);
 
-  // In regular web browsers, do not render this desktop window title bar at all.
-  // It will automatically become visible once wrapped inside an Electron desktop app.
-  if (!isElectron) {
-    return null;
-  }
+  // CustomTitlebar in src/app/layout.tsx is the single global Electron titlebar.
+  // Returning null prevents a duplicate WebkitAppRegion: 'drag' bar from overlapping
+  // and swallowing mouse clicks on the View / Terminal / Help menus.
+  return null;
 
   const handleMinimize = () => {
     if (onMinimize) onMinimize();

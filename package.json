@@ -1,6 +1,6 @@
 {
   "name": "aidev-coding-agent",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Aidev Desktop Coding Agent",
   "author": "Aidev Team <support@aidev.com>",
   "private": true,
@@ -17,7 +17,7 @@
     "linux": "bash aidev-desktop.sh",
     "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --target node20 --no-splitting --external electron",
     "pack:npm": "node scripts/pack-npm.mjs",
-    "electron:dev": "npm run build:electron && electron .",
+    "electron:dev": "npm run build && npm run build:electron && electron .",
     "dist": "npm run build && npm run build:electron && electron-builder",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "dist:linux": "npm run build && npm run build:electron && electron-builder --linux",
