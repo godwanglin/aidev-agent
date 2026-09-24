@@ -423,7 +423,17 @@ if (!gotTheLock) {
       // 2. Seamlessly transition to main app URL
       if (mainWindow && !mainWindow.isDestroyed()) {
         await mainWindow.loadURL(`http://127.0.0.1:${activePort}`);
-        initAutoUpdater(mainWindow);
+        initAutoUpdater(mainWindow, () => {
+          if (serverProcess) {
+            try {
+              serverProcess.kill();
+            } catch {}
+            serverProcess = null;
+          }
+          try {
+            app.releaseSingleInstanceLock();
+          } catch {}
+        });
       }
     } catch (err: any) {
       console.error('Failed to initialize Aidev Desktop application:', err);

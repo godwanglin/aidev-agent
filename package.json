@@ -1,6 +1,6 @@
 {
   "name": "aidev-coding-agent",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Aidev Desktop Coding Agent",
   "author": "Aidev Team <support@aidev.com>",
   "private": true,
@@ -76,12 +76,6 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "nsis-web",
           "arch": [
             "x64"
           ]

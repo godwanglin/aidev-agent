@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { Copy, Check, ListOrdered, FileText, ExternalLink, X, ArrowRight, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Copy, Check, ListOrdered, FileText, ExternalLink, X, ArrowRight, ChevronRight, ChevronDown, ChevronUp, AlertCircle, AlertTriangle, Undo2, Loader2 } from 'lucide-react';
 import { ReasoningAccordion } from './reasoning-accordion';
 import { ToolRow } from './tool-row';
 import { FileChip } from './file-chip';
@@ -578,6 +578,8 @@ interface MessageItemProps {
   copyText?: string;
   workdir?: string;
   latestUpdateTodosId?: string | null;
+  onContinueTurn?: (errorMessageId: string) => void;
+  onRevertTurn?: (message: MessageRecord, promptText: string) => Promise<void> | void;
 }
 
 export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
@@ -593,8 +595,13 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
   copyText,
   workdir,
   latestUpdateTodosId,
+  onContinueTurn,
+  onRevertTurn,
 }) {
   const [copied, setCopied] = useState(false);
+  const [confirmRevert, setConfirmRevert] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
+  const [isUserBubbleExpanded, setIsUserBubbleExpanded] = useState(false);
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<{
     url: string;
     title?: string;
@@ -769,36 +776,163 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
               ))}
             </div>
           )}
-          <div className="whitespace-pre-wrap">
-            {renderContentWithChips(
-              processedUserText,
-              onOpenFile,
-              handleOpenImage,
-              userBase64Images,
-              (url, title) => setSelectedPreviewImage({ url, title }),
-              onOpenBrowser,
-              true
-            )}
-          </div>
-        </div>
-        {/* User Card Actions */}
-        <div className="flex items-center gap-2 mt-1 px-1 text-[#6e6e6e] opacity-0 group-hover/user:opacity-100 transition-opacity duration-150 select-none min-h-[20px]">
-          <button
-            type="button"
-            onClick={() => handleCopy(cleanCopyContent)}
-            className="p-1 rounded hover:text-[#cccccc] transition cursor-pointer"
-            title="Copy prompt"
-          >
-            {copied ? (
-              <Check className="w-3.5 h-3.5 text-[#7aae66]" />
-            ) : (
-              <Copy className="w-3.5 h-3.5" />
-            )}
-          </button>
-          {timestampStr && (
-            <span className="text-[11px] font-sans text-[#666666]">
-              {timestampStr}
-            </span>
+          {(() => {
+            const userLinesCount = processedUserText.split(/\r?\n/).length;
+            const isLongUserMessage = userLinesCount > 6 || processedUserText.length > 380;
+            const isCollapsed = isLongUserMessage && !isUserBubbleExpanded;
+            const approxLines = Math.max(userLinesCount, Math.ceil(processedUserText.length / 85));
+
+            return (
+              <>
+                <div
+                  className={`relative whitespace-pre-wrap transition-all duration-200 ${
+                    isCollapsed ? 'max-h-[115px] overflow-hidden' : ''
+                  }`}
+                  style={
+                    isCollapsed
+                      ? {
+                          WebkitMaskImage:
+                            'linear-gradient(to bottom, #000000 0%, #000000 32%, rgba(0,0,0,0.55) 66%, rgba(0,0,0,0.15) 88%, transparent 100%)',
+                          maskImage:
+                            'linear-gradient(to bottom, #000000 0%, #000000 32%, rgba(0,0,0,0.55) 66%, rgba(0,0,0,0.15) 88%, transparent 100%)',
+                        }
+                      : undefined
+                  }
+                >
+                  {renderContentWithChips(
+                    processedUserText,
+                    onOpenFile,
+                    handleOpenImage,
+                    userBase64Images,
+                    (url, title) => setSelectedPreviewImage({ url, title }),
+                    onOpenBrowser,
+                    true
+                  )}
+                  {isCollapsed && (
+                    <div
+                      onClick={() => setIsUserBubbleExpanded(true)}
+                      className="absolute inset-x-0 bottom-0 h-12 cursor-pointer"
+                      title="Klik untuk menampilkan seluruh pesan"
+                    />
+                  )}
+                </div>
+
+                {/* Inline Bottom Action Bar inside User Bubble (Expand/Collapse on left · Timestamp + Copy + Revert on right on hover) */}
+                <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 select-none text-[#787878]">
+                  <div>
+                    {isLongUserMessage && (
+                      <button
+                        type="button"
+                        onClick={() => setIsUserBubbleExpanded((prev) => !prev)}
+                        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#8e8e98] hover:text-[#e4e4e7] transition cursor-pointer"
+                      >
+                        {isUserBubbleExpanded ? (
+                          <>
+                            <ChevronUp className="w-3.5 h-3.5" />
+                            <span>Sembunyikan</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            <span>Tampilkan semua ({approxLines} baris)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    className={`flex items-center justify-end gap-2.5 transition-opacity duration-150 ${
+                      confirmRevert || copied
+                        ? 'opacity-100 pointer-events-auto'
+                        : 'opacity-0 pointer-events-none group-hover/user:opacity-100 group-hover/user:pointer-events-auto'
+                    }`}
+                  >
+                    {timestampStr && (
+                      <span className="text-[11.5px] font-sans text-[#787878] tracking-tight">
+                        {timestampStr}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(cleanCopyContent)}
+                      className="p-0.5 rounded hover:text-[#e4e4e7] transition cursor-pointer"
+                      title="Salin pesan"
+                    >
+                      {copied ? (
+                        <Check className="w-3.5 h-3.5 text-[#7aae66]" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    {onRevertTurn && (
+                      <button
+                        type="button"
+                        disabled={isReverting}
+                        onClick={() => setConfirmRevert((prev) => !prev)}
+                        className={`p-0.5 rounded transition cursor-pointer ${
+                          confirmRevert
+                            ? 'text-amber-400 bg-amber-500/10'
+                            : 'hover:text-[#e4e4e7]'
+                        }`}
+                        title="Revert / Restore checkpoint ke titik pesan ini"
+                      >
+                        {isReverting ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        ) : (
+                          <Undo2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
+          {/* Sleek Inline Revert Confirmation Strip */}
+          {confirmRevert && onRevertTurn && (
+            <div className="mt-2 pt-2 border-t border-white/[0.08] flex items-center justify-between gap-2 text-[11.5px] select-none animate-fade-in">
+              <span className="text-[#b4b4bb]">
+                Kembalikan file &amp; chat ke titik pesan ini?
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  disabled={isReverting}
+                  onClick={() => setConfirmRevert(false)}
+                  className="px-2 py-0.5 rounded-md bg-white/[0.05] hover:bg-white/[0.1] text-[#a1a1aa] hover:text-white transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isReverting}
+                  onClick={async () => {
+                    try {
+                      setIsReverting(true);
+                      await onRevertTurn(message, cleanCopyContent);
+                    } finally {
+                      setIsReverting(false);
+                      setConfirmRevert(false);
+                    }
+                  }}
+                  className="px-2.5 py-0.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-medium transition cursor-pointer inline-flex items-center gap-1"
+                >
+                  {isReverting ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Mengembalikan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Undo2 className="w-3 h-3" />
+                      <span>Revert ke Titik Ini</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -841,14 +975,74 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
     (message.content.includes('paket langganan') ||
       message.content.includes('billing') ||
       message.content.includes('upgrade paket') ||
+      message.content.includes('Saldo credit') ||
+      message.content.includes('0 CR') ||
+      message.content.includes('402') ||
       message.content.includes('403 Model'));
 
-  const billingUrlMatch =
+  const normalizedErrorContent =
     typeof message.content === 'string'
-      ? message.content.match(/https?:\/\/[^\s)]+(?:billing|pricing)[^\s)]*/i) ||
-        (isBillingError ? message.content.match(/https?:\/\/[^\s)]+/i) : null)
+      ? message.content.replace(
+          /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/(billing|pricing|keys)[^\s)]*/gi,
+          'https://aidev.weebinhub.biz.id/$1'
+        )
+      : '';
+
+  const billingUrlMatch =
+    normalizedErrorContent
+      ? normalizedErrorContent.match(/https?:\/\/[^\s)]+(?:billing|pricing)[^\s)]*/i) ||
+        (isBillingError ? normalizedErrorContent.match(/https?:\/\/[^\s)]+/i) : null)
       : null;
-  const billingUrl = billingUrlMatch ? billingUrlMatch[0] : (isBillingError ? 'https://aidev.weebinhub.biz.id/billing' : null);
+  const rawMatchedUrl = billingUrlMatch ? billingUrlMatch[0] : null;
+  const billingUrl =
+    isBillingError || (rawMatchedUrl && /localhost|127\.0\.0\.1|billing|pricing/i.test(rawMatchedUrl))
+      ? 'https://aidev.weebinhub.biz.id/billing'
+      : rawMatchedUrl;
+
+  const [isCreditRestored, setIsCreditRestored] = useState(false);
+  const [isResumingTurn, setIsResumingTurn] = useState(false);
+
+  useEffect(() => {
+    if (!isBillingError) return;
+    let isMounted = true;
+
+    const checkCreditStatus = async () => {
+      try {
+        const res = await fetch('/api/usage');
+        if (!res.ok) return;
+        const data = await res.json();
+        const credits = Number(
+          data?.credits ?? data?.remainingCredits ?? data?.balance ?? data?.user?.credits ?? 0
+        );
+        if (isMounted && credits > 0) {
+          setIsCreditRestored(true);
+        }
+      } catch {}
+    };
+
+    checkCreditStatus();
+    const interval = setInterval(checkCreditStatus, 7000);
+    const onWindowFocus = () => checkCreditStatus();
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, [isBillingError]);
+
+  const openExternalBilling = (urlToOpen: string) => {
+    const cleanTarget = urlToOpen.replace(
+      /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/(billing|pricing|keys)[^\s)]*/gi,
+      'https://aidev.weebinhub.biz.id/$1'
+    );
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+      (window as any).electronAPI.openExternal(cleanTarget);
+    } else if (typeof window !== 'undefined') {
+      window.open(cleanTarget, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <div className={`${chatWidthClass} mx-auto w-full px-4 pt-2 pb-2.5 space-y-2 select-text font-sans group/assistant`}>
@@ -889,14 +1083,22 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
                 </div>
                 <div className="flex-1 min-w-0 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`text-[12px] font-semibold uppercase tracking-wider ${
-                      isBillingError ? 'text-amber-400' : 'text-red-400'
-                    }`}>
-                      {isBillingError ? 'Paket Langganan Diperlukan (403)' : 'Gagal Memproses Permintaan'}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[12px] font-semibold uppercase tracking-wider ${
+                        isBillingError ? 'text-amber-400' : 'text-red-400'
+                      }`}>
+                        {isBillingError ? 'Paket Langganan / Credit Diperlukan' : 'Gagal Memproses Permintaan'}
+                      </span>
+                      {isCreditRestored && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-medium animate-in fade-in">
+                          <Check className="w-3 h-3" />
+                          <span>Credit telah pulih — siap dilanjutkan</span>
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handleCopy(cleanCopyContent)}
+                      onClick={() => handleCopy(normalizedErrorContent || cleanCopyContent)}
                       className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition cursor-pointer"
                       title="Salin pesan error"
                     >
@@ -908,19 +1110,24 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
                       remarkPlugins={[remarkGfm]}
                       components={{
                         a({ href, children }: any) {
-                          const isBillingLink = Boolean(href && /billing|pricing/i.test(href));
+                          const targetHref =
+                            href && /localhost|127\.0\.0\.1|billing|pricing/i.test(href)
+                              ? 'https://aidev.weebinhub.biz.id/billing'
+                              : href;
+                          const isBillingLink = Boolean(targetHref && /billing|pricing/i.test(targetHref));
                           return (
                             <a
-                              href={href}
+                              href={targetHref}
                               onClick={(e) => {
-                                if (isBillingLink) {
-                                  e.preventDefault();
-                                  window.open(href, '_blank');
+                                e.preventDefault();
+                                if (isBillingLink && targetHref) {
+                                  openExternalBilling(targetHref);
                                   return;
                                 }
-                                if (onOpenBrowser && href && /^https?:\/\//i.test(href)) {
-                                  e.preventDefault();
-                                  onOpenBrowser(href);
+                                if (onOpenBrowser && targetHref && /^https?:\/\//i.test(targetHref)) {
+                                  onOpenBrowser(targetHref);
+                                } else if (targetHref) {
+                                  openExternalBilling(targetHref);
                                 }
                               }}
                               target="_blank"
@@ -938,24 +1145,42 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
                         },
                       }}
                     >
-                      {message.content}
+                      {normalizedErrorContent}
                     </ReactMarkdown>
                   </div>
 
-                  {billingUrl && (
-                    <div className="pt-2 flex items-center gap-2">
+                  <div className="pt-2 flex items-center flex-wrap gap-2">
+                    {billingUrl && (
                       <button
                         type="button"
-                        onClick={() => {
-                          window.open(billingUrl, '_blank');
-                        }}
+                        onClick={() => openExternalBilling(billingUrl)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[12px] font-medium transition shadow-sm cursor-pointer"
                       >
                         <span>Upgrade Paket di Billing</span>
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>
-                    </div>
-                  )}
+                    )}
+
+                    {onContinueTurn && (
+                      <button
+                        type="button"
+                        disabled={isResumingTurn}
+                        onClick={() => {
+                          setIsResumingTurn(true);
+                          onContinueTurn(message.id);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-medium transition shadow-sm cursor-pointer disabled:opacity-50 ${
+                          isCreditRestored
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white ring-1 ring-emerald-400/40'
+                            : 'bg-white/[0.12] hover:bg-white/[0.18] text-white border border-white/15'
+                        }`}
+                        title="Lanjutkan pengerjaan tugas dari titik terakhir yang terhenti"
+                      >
+                        <span>{isResumingTurn ? 'Melanjutkan...' : 'Lanjutkan Pengerjaan'}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

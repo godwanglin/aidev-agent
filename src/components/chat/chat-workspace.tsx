@@ -86,6 +86,8 @@ interface ChatWorkspaceProps {
   isLoadingSession?: boolean;
   onLoadOlderMessages?: () => void;
   verboseChat?: boolean;
+  onContinueTurn?: (errorMessageId: string) => void;
+  onRevertTurn?: (message: MessageRecord, promptText: string) => Promise<void> | void;
 }
 
 export interface TurnSegment {
@@ -187,6 +189,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   isLoadingSession = false,
   onLoadOlderMessages,
   verboseChat = true,
+  onContinueTurn,
+  onRevertTurn,
 }) => {
   const { chatWidthClass } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -494,8 +498,18 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto pt-4 pb-4 select-text"
-        style={{ overscrollBehavior: 'contain' }}
+        className="flex-1 min-h-0 overflow-y-auto pt-4 pb-7 select-text"
+        style={{
+          overscrollBehavior: 'contain',
+          ...(messages.length > 0 || isStreaming || queuedMessage
+            ? {
+                WebkitMaskImage:
+                  'linear-gradient(to bottom, #000000 0%, #000000 calc(100% - 52px), rgba(0,0,0,0.52) calc(100% - 24px), rgba(0,0,0,0.12) calc(100% - 8px), transparent 100%)',
+                maskImage:
+                  'linear-gradient(to bottom, #000000 0%, #000000 calc(100% - 52px), rgba(0,0,0,0.52) calc(100% - 24px), rgba(0,0,0,0.12) calc(100% - 8px), transparent 100%)',
+              }
+            : {}),
+        }}
       >
         {isLoadingSession && !isStreaming ? (
           /* Sleek Session Loading State */
@@ -622,15 +636,40 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         onOpenFileDiff={onOpenFileDiff}
                         onOpenFile={onOpenFile}
                         onOpenBrowser={onOpenBrowser}
+                        onRevertTurn={onRevertTurn}
                       />
                     )}
 
                     {/* 2. Interleaved Segments (Historical & Committed in this turn) */}
                     {(() => {
                       const shouldRenderTurnTodos = turn.id === latestTurnWithTodosId;
-                      const effectiveTodos = isThisTurnStreaming && liveTodos ? liveTodos : turn.taskTodos;
-                      const hasTodos = Boolean(shouldRenderTurnTodos && effectiveTodos && effectiveTodos.length > 0);
+                      const rawEffectiveTodos = isThisTurnStreaming && liveTodos ? liveTodos : turn.taskTodos;
                       const lastWorkBlockIdx = turn.segments.map((s) => s.type).lastIndexOf('work_block');
+                      const lastAssistantSegIdx = turn.segments.map((s) => s.type).lastIndexOf('assistant_text');
+                      const hasTurnError = turn.segments.some(
+                        (s) =>
+                          s.message?.status === 'ERROR' ||
+                          (typeof s.message?.content === 'string' &&
+                            (s.message.content.startsWith('⚠️') ||
+                              /^(400|401|402|403|404|429|500)\s+/i.test(s.message.content.trim()) ||
+                              s.message.content.includes('Saldo credit') ||
+                              s.message.content.includes('paket langganan') ||
+                              s.message.content.includes('Request Error:')))
+                      );
+                      const isWaitingInteraction =
+                        isLastTurn && Boolean(pendingPermission || pendingQuestion || pendingPlan);
+                      const hasCompletedFinalResponse =
+                        !isThisTurnStreaming &&
+                        !hasTurnError &&
+                        !isWaitingInteraction &&
+                        lastAssistantSegIdx !== -1 &&
+                        lastAssistantSegIdx > lastWorkBlockIdx;
+
+                      const effectiveTodos =
+                        rawEffectiveTodos && hasCompletedFinalResponse
+                          ? rawEffectiveTodos.map((item) => ({ ...item, status: 'completed' as const }))
+                          : rawEffectiveTodos;
+                      const hasTodos = Boolean(shouldRenderTurnTodos && effectiveTodos && effectiveTodos.length > 0);
                       let hasRenderedTodos = false;
 
                       return (
@@ -709,6 +748,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                                     copyText={fullTurnAssistantContent}
                                     onApprovePlan={onApprovePlan}
                                     onRejectPlan={onRejectPlan}
+                                    onContinueTurn={
+                                      onContinueTurn ||
+                                      (() => onSendMessage('Lanjutkan pengerjaan tugas yang tadi terhenti sampai selesai.'))
+                                    }
                                   />
                                 </React.Fragment>
                               );
@@ -1009,23 +1052,29 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         )}
       </div>
 
-      {/* Scroll to bottom button (only when far from bottom and there are messages) */}
-      {showScrollBottom && messages.length > 0 && (
-        <div className="relative flex justify-center mb-2 z-10 pointer-events-none animate-fade-in">
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            className="pointer-events-auto w-7.5 h-7.5 p-1.5 rounded-full bg-[#181818]/80 backdrop-blur-sm border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:bg-[#252525] flex items-center justify-center shadow-lg transition-all duration-150 hover:scale-110 active:scale-95 cursor-pointer"
-            title="Scroll to bottom"
-          >
-            <ArrowDown className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* Floating Bottom Input Dock - only shown when there are messages, streaming, or queued message! */}
       {(messages.length > 0 || isStreaming || queuedMessage) && (
-        <div className="w-full shrink-0 relative z-30">
+        <div className="w-full shrink-0 relative z-30 pt-1">
+          {/* Soft dark feather gradient above ChatInput */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-12 inset-x-0 h-12 bg-gradient-to-t from-[#101010] via-[#101010]/75 to-transparent"
+          />
+
+          {/* Floating Scroll to bottom button */}
+          {showScrollBottom && messages.length > 0 && (
+            <div className="absolute -top-10 inset-x-0 flex justify-center z-20 pointer-events-none animate-fade-in">
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="pointer-events-auto w-7.5 h-7.5 p-1.5 rounded-full bg-[#181818]/90 backdrop-blur-md border border-[#2e2e34] text-[#b4b4bb] hover:text-white hover:bg-[#25252b] flex items-center justify-center shadow-lg transition-all duration-150 hover:scale-110 active:scale-95 cursor-pointer"
+                title="Scroll ke paling bawah"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {queuedMessage && (
             <div className={`${chatWidthClass} mx-auto w-full px-4 mb-2`}>
               <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#141416] border border-[#26262c] text-[12px] text-[#cccccc] shadow-lg animate-fade-in">

@@ -1912,15 +1912,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       initialUserContent = JSON.stringify(parts);
     }
 
+    const isSeamlessContinue = prompt.trim() === '__CONTINUE_TURN__';
     const tempUserMsgId = `user_${Date.now()}`;
-    const tempUserMsg: MessageRecord = {
-      id: tempUserMsgId,
-      session_id: targetSession.id,
-      role: 'user',
-      content: initialUserContent,
-      created_at: Date.now(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
+    if (!isSeamlessContinue) {
+      const tempUserMsg: MessageRecord = {
+        id: tempUserMsgId,
+        session_id: targetSession.id,
+        role: 'user',
+        content: initialUserContent,
+        created_at: Date.now(),
+      };
+      setMessages((prev) => [...prev.filter((m) => m.status !== 'ERROR'), tempUserMsg]);
+    } else {
+      setMessages((prev) => prev.filter((m) => m.status !== 'ERROR'));
+    }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -4204,6 +4209,47 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenBrowser={handleOpenBrowserTab}
                 onOpenReview={handleOpenReview}
                 onSendMessage={handleSendMessage}
+                onContinueTurn={(errId) => {
+                  setMessages((prev) => prev.filter((m) => m.id !== errId && m.status !== 'ERROR'));
+                  handleSendMessage('__CONTINUE_TURN__');
+                }}
+                onRevertTurn={async (targetMsg, promptText) => {
+                  activeStreamIdRef.current++;
+                  abortControllerRef.current?.abort();
+                  abortControllerRef.current = null;
+                  isStreamingRef.current = false;
+                  setIsStreaming(false);
+                  setStreamingContent('');
+                  setStreamingReasoning('');
+                  setLiveToolMessages([]);
+
+                  try {
+                    await fetch(`/api/sessions/${targetMsg.session_id}/revert-turn`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        messageId: targetMsg.id,
+                        createdAt: targetMsg.created_at,
+                      }),
+                    });
+                  } catch {}
+
+                  setMessages((prev) =>
+                    prev.filter(
+                      (m) => m.id !== targetMsg.id && m.created_at < targetMsg.created_at
+                    )
+                  );
+
+                  window.dispatchEvent(
+                    new CustomEvent('aidev-restore-prompt', {
+                      detail: { text: promptText },
+                    })
+                  );
+
+                  setTimeout(() => {
+                    refreshSessionData({ forceMessages: true });
+                  }, 150);
+                }}
                 onPermissionRespond={handlePermissionRespond}
                 onAnswerQuestion={handleAnswerQuestion}
                 onCancelQuestion={handleCancelQuestion}
@@ -4259,6 +4305,40 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenFile={openFileTab}
                 onOpenBrowser={handleOpenBrowserTab}
                 onSendMessage={handleSendSplitMessage}
+                onContinueTurn={(errId) => {
+                  setSplitMessages((prev) => prev.filter((m) => m.id !== errId && m.status !== 'ERROR'));
+                  handleSendSplitMessage('__CONTINUE_TURN__');
+                }}
+                onRevertTurn={async (targetMsg, promptText) => {
+                  splitAbortControllerRef.current?.abort();
+                  setIsSplitStreaming(false);
+                  setSplitStreamingContent('');
+                  setSplitStreamingReasoning('');
+                  setSplitLiveToolMessages([]);
+
+                  try {
+                    await fetch(`/api/sessions/${targetMsg.session_id}/revert-turn`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        messageId: targetMsg.id,
+                        createdAt: targetMsg.created_at,
+                      }),
+                    });
+                  } catch {}
+
+                  setSplitMessages((prev) =>
+                    prev.filter(
+                      (m) => m.id !== targetMsg.id && m.created_at < targetMsg.created_at
+                    )
+                  );
+
+                  window.dispatchEvent(
+                    new CustomEvent('aidev-restore-prompt', {
+                      detail: { text: promptText },
+                    })
+                  );
+                }}
                 onPermissionRespond={handleSplitPermissionRespond}
                 onAnswerQuestion={handleSplitAnswerQuestion}
                 onCancelQuestion={handleSplitCancelQuestion}

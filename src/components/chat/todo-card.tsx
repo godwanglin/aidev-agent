@@ -82,7 +82,7 @@ export const TodoCard: React.FC<TodoCardProps> = ({
             className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border ${
               isAllDone
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : inProgress > 0
+                : inProgress > 0 && isStreaming
                 ? 'bg-[#58a6ff]/10 text-[#58a6ff] border-[#58a6ff]/20'
                 : 'bg-white/[0.05] text-[#a1a1aa] border-white/[0.06]'
             }`}
@@ -90,7 +90,7 @@ export const TodoCard: React.FC<TodoCardProps> = ({
             <span>{percent}%</span>
             {isAllDone ? (
               <span className="text-[10px] font-normal uppercase tracking-wider">Done</span>
-            ) : inProgress > 0 ? (
+            ) : inProgress > 0 && isStreaming ? (
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
             ) : null}
           </div>
@@ -130,8 +130,10 @@ export const TodoCard: React.FC<TodoCardProps> = ({
                   <div className="mt-0.5 shrink-0">
                     {isCompleted ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.2} />
-                    ) : isInProgress ? (
+                    ) : isInProgress && isStreaming ? (
                       <Loader2 className="w-3.5 h-3.5 text-[#58a6ff] animate-spin" strokeWidth={2.5} />
+                    ) : isInProgress ? (
+                      <Circle className="w-3.5 h-3.5 text-amber-400" strokeWidth={2.2} />
                     ) : (
                       <Circle className="w-3.5 h-3.5 text-[#52525b]" strokeWidth={2} />
                     )}
@@ -148,8 +150,10 @@ export const TodoCard: React.FC<TodoCardProps> = ({
                   </div>
 
                   <div className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-[#71717a]">
-                    {isInProgress ? (
+                    {isInProgress && isStreaming ? (
                       <span className="text-[#58a6ff] font-semibold">Active</span>
+                    ) : isInProgress ? (
+                      <span className="text-amber-400 font-semibold">Paused</span>
                     ) : isCompleted ? (
                       <span className="text-emerald-500">Done</span>
                     ) : (

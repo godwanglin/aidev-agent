@@ -789,6 +789,31 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const handleRestorePrompt = (e: Event) => {
+      const customEvent = e as CustomEvent<{ text?: string }>;
+      const text = customEvent.detail?.text;
+      const editor = editorRef.current;
+      if (!editor || typeof text !== 'string') return;
+      editor.textContent = text;
+      setIsEmpty(text.trim().length === 0);
+      hasEverInteractedRef.current = true;
+      setTimeout(() => {
+        if (!editorRef.current) return;
+        editorRef.current.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }, 25);
+    };
+
+    window.addEventListener('aidev-restore-prompt', handleRestorePrompt);
+    return () => window.removeEventListener('aidev-restore-prompt', handleRestorePrompt);
+  }, []);
+
   const filteredFiles = workspaceFiles
     .filter((f) => f.toLowerCase().includes(mentionQuery.toLowerCase()))
     .slice(0, 8);

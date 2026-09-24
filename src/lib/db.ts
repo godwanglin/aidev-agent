@@ -517,6 +517,36 @@ export const messageRepo = {
       msg.created_at
     );
   },
+  deleteById(id: string): void {
+    const db = getDb();
+    db.prepare('DELETE FROM messages WHERE id = ?').run(id);
+  },
+  deleteErrorsBySession(sessionId: string): void {
+    const db = getDb();
+    db.prepare("DELETE FROM messages WHERE session_id = ? AND status = 'ERROR'").run(sessionId);
+  },
+  deleteFromTimestamp(sessionId: string, fromCreatedAt: number, messageId?: string): number {
+    const db = getDb();
+    let effectiveTs = fromCreatedAt;
+    if (messageId) {
+      const targetRow = db
+        .prepare('SELECT created_at FROM messages WHERE id = ? AND session_id = ? LIMIT 1')
+        .get(messageId, sessionId) as { created_at?: number } | undefined;
+      if (targetRow && typeof targetRow.created_at === 'number') {
+        effectiveTs = targetRow.created_at;
+      }
+    }
+    const res = db
+      .prepare('DELETE FROM messages WHERE session_id = ? AND (created_at >= ? OR id = ?)')
+      .run(sessionId, effectiveTs, messageId || '');
+    try {
+      db.prepare('DELETE FROM session_compactions WHERE session_id = ? AND created_at >= ?').run(
+        sessionId,
+        effectiveTs
+      );
+    } catch {}
+    return Number(res.changes || 0);
+  },
   update(id: string, updates: Partial<MessageRecord>): void {
     const db = getDb();
     const fields: string[] = [];

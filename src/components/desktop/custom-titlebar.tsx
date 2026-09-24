@@ -147,10 +147,16 @@ export function CustomTitlebar() {
         if (anchor && anchor.href) {
           try {
             const parsed = new URL(anchor.href);
+            const isLocalhost = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost';
+            if (isLocalhost && /^\/(billing|pricing|keys)/i.test(parsed.pathname)) {
+              e.preventDefault();
+              e.stopPropagation();
+              api.openExternal(`https://aidev.weebinhub.biz.id${parsed.pathname}${parsed.search}`);
+              return;
+            }
             if (
               (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:') &&
-              parsed.hostname !== '127.0.0.1' &&
-              parsed.hostname !== 'localhost'
+              !isLocalhost
             ) {
               e.preventDefault();
               e.stopPropagation();

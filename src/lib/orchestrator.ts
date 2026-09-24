@@ -279,20 +279,39 @@ export class AgentOrchestrator {
       }
     }
 
-    messageRepo.create({
-      id: userMsgId,
-      session_id: this.sessionId,
-      role: 'user',
-      content: storedContent,
-      created_at: Date.now(),
-    });
+    // Clean up any previous error cards in this session when resuming or starting a turn
+    try {
+      messageRepo.deleteErrorsBySession(this.sessionId);
+    } catch {}
+
+    const isSeamlessContinue = trimmedPrompt === '__CONTINUE_TURN__';
+    if (!isSeamlessContinue) {
+      messageRepo.create({
+        id: userMsgId,
+        session_id: this.sessionId,
+        role: 'user',
+        content: storedContent,
+        created_at: Date.now(),
+      });
+    }
 
     try {
-      await this.executeLoop(session, commandMode, cleanPrompt, targetSkillName);
+      await this.executeLoop(
+        session,
+        commandMode,
+        isSeamlessContinue
+          ? 'Lanjutkan pengerjaan tugas dan daftar Task List yang tadi terhenti sampai selesai.'
+          : cleanPrompt,
+        targetSkillName
+      );
     } catch (err: any) {
       if (!this.isAborted) {
         logAgent(`Error during turn in session ${this.sessionId}:`, err.message);
-        const errMsg = err.message || 'Unknown orchestration error';
+        const rawErrMsg = err.message || 'Unknown orchestration error';
+        const errMsg = rawErrMsg.replace(
+          /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/(billing|pricing|keys)[^\s)]*/gi,
+          'https://aidev.weebinhub.biz.id/$1'
+        );
         const errRecord: MessageRecord = {
           id: `msg_${Date.now()}_error`,
           session_id: this.sessionId,
@@ -807,6 +826,97 @@ export class AgentOrchestrator {
 
       // If no tool calls, turn is finished
       if (currentToolCalls.length === 0) {
+        if (!isPlanResult && !this.isAborted && cleanContent.length > 0) {
+          try {
+            const turnHistory = messageRepo.listBySession(this.sessionId);
+            let lastUserIdx = -1;
+            for (let i = turnHistory.length - 1; i >= 0; i--) {
+              if (turnHistory[i].role === 'user') {
+                lastUserIdx = i;
+                break;
+              }
+            }
+            const currentTurnMsgs = lastUserIdx >= 0 ? turnHistory.slice(lastUserIdx + 1) : turnHistory;
+            const todoToolNames = new Set([
+              'update_todos',
+              'update_todo',
+              'todo_write',
+              'manage_tasks',
+              'todos',
+              'tasks',
+            ]);
+            for (let i = currentTurnMsgs.length - 1; i >= 0; i--) {
+              const m = currentTurnMsgs[i];
+              if (m.role === 'tool' && todoToolNames.has((m.tool_name || '').toLowerCase())) {
+                let argsObj: any = null;
+                let resObj: any = null;
+                try {
+                  if (m.tool_arguments) argsObj = JSON.parse(m.tool_arguments);
+                } catch {}
+                try {
+                  if (m.tool_result) resObj = JSON.parse(m.tool_result);
+                } catch {}
+
+                const markAllCompleted = (arr: any[]) =>
+                  arr.map((item: any) =>
+                    typeof item === 'object' && item !== null
+                      ? { ...item, status: 'completed' }
+                      : item
+                  );
+
+                let changed = false;
+                if (argsObj && Array.isArray(argsObj.todos)) {
+                  if (argsObj.todos.some((t: any) => t?.status !== 'completed')) {
+                    argsObj.todos = markAllCompleted(argsObj.todos);
+                    changed = true;
+                  }
+                } else if (argsObj && Array.isArray(argsObj.tasks)) {
+                  if (argsObj.tasks.some((t: any) => t?.status !== 'completed')) {
+                    argsObj.tasks = markAllCompleted(argsObj.tasks);
+                    changed = true;
+                  }
+                }
+                if (resObj && Array.isArray(resObj.todos)) {
+                  if (resObj.todos.some((t: any) => t?.status !== 'completed')) {
+                    resObj.todos = markAllCompleted(resObj.todos);
+                    changed = true;
+                  }
+                } else if (resObj && Array.isArray(resObj.tasks)) {
+                  if (resObj.tasks.some((t: any) => t?.status !== 'completed')) {
+                    resObj.tasks = markAllCompleted(resObj.tasks);
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  const updatedArgsStr = argsObj ? JSON.stringify(argsObj) : m.tool_arguments;
+                  const updatedResObj = resObj || argsObj;
+                  const updatedResStr = updatedResObj ? JSON.stringify(updatedResObj) : m.tool_result;
+                  messageRepo.update(m.id, {
+                    tool_arguments: updatedArgsStr || undefined,
+                    tool_result: updatedResStr || undefined,
+                    content: updatedResStr || undefined,
+                    status: 'COMPLETED',
+                  });
+                  this.onEvent({
+                    type: 'tool_completed',
+                    data: {
+                      messageId: m.id,
+                      toolCallId: m.tool_call_id || `todo_done_${Date.now()}`,
+                      toolName: m.tool_name || 'update_todos',
+                      arguments: argsObj,
+                      result: updatedResObj,
+                      durationMs: 0,
+                      status: 'COMPLETED',
+                    },
+                  });
+                }
+                break;
+              }
+            }
+          } catch {}
+        }
+
         keepRunning = false;
         this.onEvent({ type: 'done', data: { status: 'COMPLETED' } });
         break;
@@ -1888,7 +1998,10 @@ Directives:
           content: msg.content || '{}',
         });
       } else if (msg.role === 'assistant') {
-        // Skip dummy "..." placeholder assistant messages that were left when an iteration crashed
+        // Skip error records and dummy "..." placeholder assistant messages left when an iteration crashed
+        if (msg.status === 'ERROR') {
+          continue;
+        }
         if (msg.content === '...' && !msg.tool_call_id && !msg.tool_arguments) {
           continue;
         }
@@ -2001,6 +2114,16 @@ Directives:
           }
         }
       }
+    }
+
+    // If resuming an interrupted turn and the last message is an assistant message without tool calls,
+    // append a continuation instruction so the model continues executing the task list seamlessly.
+    const lastMsg = cleanMessages[cleanMessages.length - 1];
+    if (lastMsg && lastMsg.role === 'assistant' && (!lastMsg.tool_calls || lastMsg.tool_calls.length === 0)) {
+      cleanMessages.push({
+        role: 'user',
+        content: 'Lanjutkan pengerjaan tugas dan daftar Task List yang tadi terhenti sampai selesai.',
+      });
     }
 
     return cleanMessages;

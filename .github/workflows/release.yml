@@ -75,6 +75,7 @@ jobs:
           cp -vf release/*.7z release-web-staging/ 2>/dev/null || true
           npx electron-builder --win nsis --publish never
           cp -vf release-web-staging/* release/ || true
+          rm -f release/*.blockmap
           echo "=== [FINAL WINDOWS RELEASE ASSETS] ==="
           ls -lh release/
         env:
@@ -87,7 +88,6 @@ jobs:
           path: |
             release/*.exe
             release/*.7z
-            release/*.blockmap
             release/latest.yml
           if-no-files-found: warn
 
@@ -140,7 +140,9 @@ jobs:
         run: node scripts/prune-node-modules.mjs
 
       - name: Build Linux Desktop Packages (AppImage, deb, tar.gz)
-        run: npx electron-builder --linux --publish never
+        run: |
+          npx electron-builder --linux --publish never
+          rm -f release/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -163,7 +165,6 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.tar.gz
-            release/*.blockmap
             release/latest-linux.yml
           if-no-files-found: warn
 
