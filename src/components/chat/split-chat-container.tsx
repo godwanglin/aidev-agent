@@ -40,6 +40,10 @@ export const SplitChatContainer: React.FC<SplitChatContainerProps> = ({
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
+      if (e.buttons === 0) {
+        setIsDragging(false);
+        return;
+      }
       if (!isDragging || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
 
@@ -64,9 +68,11 @@ export const SplitChatContainer: React.FC<SplitChatContainerProps> = ({
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
       return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
       };
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
@@ -81,7 +87,7 @@ export const SplitChatContainer: React.FC<SplitChatContainerProps> = ({
       ref={containerRef}
       className={`flex-1 min-h-0 flex ${
         isHorizontal ? 'flex-row' : 'flex-col'
-      } h-full overflow-hidden select-none relative`}
+      } h-full overflow-hidden ${isDragging ? 'select-none' : ''} relative`}
       style={{ cursor: isDragging ? (isHorizontal ? 'col-resize' : 'row-resize') : 'default' }}
     >
       {/* 1. Primary Pane */}

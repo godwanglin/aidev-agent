@@ -457,13 +457,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   }, [compactions.length]);
 
   return (
-    <section className="flex-1 min-h-0 flex flex-col h-full bg-[#101010] overflow-hidden relative select-none">
+    <section className="flex-1 min-h-0 flex flex-col h-full bg-[#101010] overflow-hidden relative">
       <SelectionQuoteButton />
       {/* Messages Canvas Scroll Area */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto pt-4 pb-4"
+        className="flex-1 min-h-0 overflow-y-auto pt-4 pb-4 select-text"
         style={{ overscrollBehavior: 'contain' }}
       >
         {isLoadingSession && !isStreaming ? (
@@ -580,8 +580,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 return (
                   <div
                     key={turn.id}
-                    className={`space-y-2 ${turnIdx > 0 ? 'pt-7' : 'pt-1'}`}
-                    style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
+                    className={`space-y-2 select-text ${turnIdx > 0 ? 'pt-7' : 'pt-1'}`}
                   >
                     {/* 1. User Message Card */}
                     {turn.userMessage && (

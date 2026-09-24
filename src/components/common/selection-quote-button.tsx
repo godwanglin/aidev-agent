@@ -35,12 +35,19 @@ export const SelectionQuoteButton: React.FC = () => {
     setSelectedText('');
   };
 
+  const isMouseDownRef = useRef(false);
+
   useEffect(() => {
-    const handleSelectionChange = () => {
+    const updateSelectionFromDom = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.rangeCount) {
         setCoords(null);
         setSelectedText('');
+        return;
+      }
+
+      // Do not mount or reposition floating button while user is actively dragging mouse to select text
+      if (isMouseDownRef.current) {
         return;
       }
 
@@ -86,6 +93,33 @@ export const SelectionQuoteButton: React.FC = () => {
       }
     };
 
+    const handleMouseDown = (e: MouseEvent) => {
+      if (buttonRef.current && buttonRef.current.contains(e.target as Node)) {
+        return;
+      }
+      isMouseDownRef.current = true;
+      setCoords(null);
+    };
+
+    const handleMouseUp = () => {
+      isMouseDownRef.current = false;
+      requestAnimationFrame(() => {
+        updateSelectionFromDom();
+      });
+    };
+
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) {
+        setCoords(null);
+        setSelectedText('');
+        return;
+      }
+      if (!isMouseDownRef.current) {
+        updateSelectionFromDom();
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'l' || e.key === 'L')) {
         const sel = window.getSelection();
@@ -111,18 +145,20 @@ export const SelectionQuoteButton: React.FC = () => {
       setCoords(null);
     };
 
+    document.addEventListener('mousedown', handleMouseDown, true);
+    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('selectionchange', handleSelectionChange);
-    document.addEventListener('mouseup', handleSelectionChange);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('scroll', handleScroll, true);
 
     return () => {
+      document.removeEventListener('mousedown', handleMouseDown, true);
+      document.removeEventListener('mouseup', handleMouseUp, true);
       document.removeEventListener('selectionchange', handleSelectionChange);
-      document.removeEventListener('mouseup', handleSelectionChange);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('scroll', handleScroll, true);
     };
-  }, [selectedText]);
+  }, []);
 
   if (!mounted || !coords || !selectedText) return null;
 

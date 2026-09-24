@@ -3795,7 +3795,15 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
   };
 
   useEffect(() => {
+    const handleMouseUp = () => {
+      setIsResizingLeft(false);
+      setIsResizingRight(false);
+    };
     const handleMouseMove = (e: MouseEvent) => {
+      if (e.buttons === 0) {
+        handleMouseUp();
+        return;
+      }
       if (isResizingLeft) {
         const newW = Math.max(180, Math.min(460, e.clientX));
         setLeftSidebarWidth(newW);
@@ -3806,20 +3814,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         setRightPanelWidth(newW);
       }
     };
-    const handleMouseUp = () => {
-      setIsResizingLeft(false);
-      setIsResizingRight(false);
-    };
 
     if (isResizingLeft || isResizingRight) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
+      window.addEventListener('contextmenu', handleMouseUp);
       return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
+        window.removeEventListener('contextmenu', handleMouseUp);
       };
     }
-  }, [isResizingLeft, isResizingRight]);
+  }, [isResizingLeft, isResizingRight, leftSidebarWidth]);
 
   // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar and Ctrl+Shift+B to toggle auxiliary pane
   useEffect(() => {
@@ -3883,7 +3891,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
   if (!hasMounted || !isConfigLoaded) {
     return (
-      <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none" />
+      <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased" />
     );
   }
 
@@ -3904,7 +3912,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
   }
 
   return (
-    <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased select-none">
+    <div className="w-full h-full max-w-[100vw] flex flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] font-sans antialiased">
       {/* 1. Global Top Bar */}
       <TopBar
         onToggleSidebar={() => {

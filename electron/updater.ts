@@ -7,13 +7,17 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   const updateConfigPath = path.join(process.resourcesPath, 'app-update.yml');
   const hasUpdateConfig = fs.existsSync(updateConfigPath);
 
-  // Do not automatically download in the background; wait for user confirmation
-  autoUpdater.autoDownload = false;
+  // Automatically download updates silently in the background (like VS Code / Antigravity / Codex Desktop)
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  let latestAvailableVersion: string | undefined;
 
   const sendStatus = (payload: any) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('updater-status', payload);
+      mainWindow.webContents.send('updater-status', {
+        version: latestAvailableVersion,
+        ...payload,
+      });
     }
   };
 
@@ -22,6 +26,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   autoUpdater.on('update-available', (info) => {
+    latestAvailableVersion = info.version;
     sendStatus({
       status: 'available',
       version: info.version,
@@ -36,6 +41,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.on('download-progress', (progressObj) => {
     sendStatus({
       status: 'downloading',
+      version: latestAvailableVersion,
       percent: Math.round(progressObj.percent),
       transferredBytes: progressObj.transferred,
       totalBytes: progressObj.total,
@@ -44,9 +50,10 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    latestAvailableVersion = info.version || latestAvailableVersion;
     sendStatus({
       status: 'downloaded',
-      version: info.version,
+      version: latestAvailableVersion,
     });
   });
 
@@ -79,7 +86,9 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
 
   ipcMain.on('quit-and-install', () => {
     if (app.isPackaged && hasUpdateConfig) {
-      autoUpdater.quitAndInstall();
+      // isSilent = true (skips NSIS installer wizard completely via /S flag),
+      // isForceRunAfter = true (automatically relaunches Aidev right after silent update)
+      autoUpdater.quitAndInstall(true, true);
     }
   });
 

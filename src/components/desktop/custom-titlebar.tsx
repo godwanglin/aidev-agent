@@ -133,8 +133,11 @@ export function CustomTitlebar() {
       });
 
       const unregisterUpdate = api.onUpdateStatus((info: any) => {
-        setUpdateStatus(info);
-        if (info.status === 'available') {
+        setUpdateStatus((prev) => ({
+          ...info,
+          version: info.version || prev.version,
+        }));
+        if (info.status === 'downloaded') {
           setShowUpdateModal(true);
         }
       });
@@ -946,7 +949,7 @@ export function CustomTitlebar() {
             <div>
               <h3 className="text-base font-semibold text-white">Aidev Desktop</h3>
               <p className="text-xs text-[#a1a1aa] mt-0.5">Autonomous Local AI Coding Agent</p>
-              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.5</p>
+              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.6</p>
             </div>
             {updateStatus.status === 'checking' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-[11px] text-[#a1a1aa]">
@@ -957,7 +960,7 @@ export function CustomTitlebar() {
             {updateStatus.status === 'not-available' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/25 text-[11px] text-[#4ade80]">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Sudah menggunakan versi terbaru (v1.0.5)</span>
+                <span>Sudah menggunakan versi terbaru (v1.0.6)</span>
               </div>
             )}
             <p className="text-xs text-[#d4d4d8] leading-relaxed">
@@ -976,22 +979,22 @@ export function CustomTitlebar() {
         </div>
       )}
 
-      {/* Modal / Dialog Pembaruan Aplikasi */}
-      {showUpdateModal && updateStatus.status === 'available' && (
+      {/* Modal / Dialog Pembaruan Aplikasi (Muncul saat sudah 100% terunduh di background) */}
+      {showUpdateModal && updateStatus.status === 'downloaded' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[100000] p-4 animate-fade-in">
           <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 font-sans select-none">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#3b82f6]/15 text-[#60a5fa] flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-[#22c55e]/15 text-[#4ade80] flex items-center justify-center shrink-0">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Versi Baru Tersedia!</h3>
+                <h3 className="text-sm font-semibold text-white">Pembaruan Siap Dipasang!</h3>
                 <p className="text-xs text-[#a1a1aa]">Aidev Desktop v{updateStatus.version || ''}</p>
               </div>
             </div>
 
             <p className="text-xs text-[#d4d4d8] leading-relaxed">
-              Pembaruan mencakup peningkatan performa, perbaikan keamanan, dan pembaruan kapabilitas agen coding.
+              Versi terbaru sudah selesai diunduh di latar belakang. Klik <strong>Restart &amp; Update</strong> untuk langsung memperbarui aplikasi secara otomatis tanpa wizard instalasi.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -1006,12 +1009,12 @@ export function CustomTitlebar() {
                 type="button"
                 onClick={() => {
                   setShowUpdateModal(false);
-                  api?.downloadUpdate?.();
+                  api?.quitAndInstall?.();
                 }}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#2563eb] hover:bg-[#1d4ed8] transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#16a34a] hover:bg-[#15803d] transition shadow-md flex items-center gap-1.5 cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Unduh Sekarang</span>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restart &amp; Update</span>
               </button>
             </div>
           </div>
