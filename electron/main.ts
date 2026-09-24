@@ -119,6 +119,35 @@ async function startBackendServer(port: number): Promise<void> {
     }
   }
 
+  const resolveServerPath = (): string => {
+    if (isDev) {
+      return path.join(__dirname, '../server.mjs');
+    }
+    const candidatePaths = [
+      path.join(process.resourcesPath, 'app', 'server.mjs'),
+      path.join(app.getAppPath(), 'server.mjs'),
+      path.join(__dirname, '../server.mjs'),
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    return candidatePaths[0];
+  };
+
+  // Wait up to 45s if an NSIS update is still extracting server.mjs and node_modules/next
+  const waitStart = Date.now();
+  while (Date.now() - waitStart < 45000) {
+    serverPath = resolveServerPath();
+    const appDir = path.dirname(serverPath);
+    const nextServerFile = path.join(appDir, 'node_modules', 'next', 'dist', 'server', 'next.js');
+    if (fs.existsSync(serverPath) && (isDev || fs.existsSync(nextServerFile))) {
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
   if (!serverPath || !fs.existsSync(serverPath)) {
     throw new Error(`Could not find server.mjs. Searched in app resources.`);
   }
@@ -160,49 +189,65 @@ async function startBackendServer(port: number): Promise<void> {
   const childEnv: Record<string, string | undefined> = { ...process.env };
   delete childEnv.ELECTRON_RUN_AS_NODE;
 
-  return new Promise<void>((resolve, reject) => {
-    let isReady = false;
-    let serverStderr = '';
+  const attemptForkServer = (): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      let isReady = false;
+      let serverStderr = '';
 
-    serverProcess = utilityProcess.fork(serverPath, [], {
-      env: {
-        ...childEnv,
-        PORT: String(port),
-        NODE_ENV: 'production',
-        AIDEV_DESKTOP: '1',
-        PATH: customPath,
-      },
-      stdio: 'pipe',
-      cwd: path.dirname(serverPath),
-    });
-
-    serverProcess.stdout?.on('data', (data: Buffer) => {
-      console.log(`[Next.js Server]: ${data.toString().trim()}`);
-    });
-
-    serverProcess.stderr?.on('data', (data: Buffer) => {
-      const line = data.toString().trim();
-      serverStderr += line + '\n';
-      console.error(`[Next.js Server Error]: ${line}`);
-    });
-
-    serverProcess.on('exit', (code: number) => {
-      console.log(`Next.js server exited with code: ${code}`);
-      if (!isReady) {
-        reject(new Error(`Server proses berhenti tiba-tiba dengan exit code: ${code}.\n${serverStderr}`));
-      }
-    });
-
-    waitForServerReady(port)
-      .then(() => {
-        isReady = true;
-        console.log(`Next.js backend server successfully listening and healthy on port ${port}!`);
-        resolve();
-      })
-      .catch((err) => {
-        reject(new Error(`${err.message}\n${serverStderr}`));
+      serverProcess = utilityProcess.fork(serverPath, [], {
+        env: {
+          ...childEnv,
+          PORT: String(port),
+          NODE_ENV: 'production',
+          AIDEV_DESKTOP: '1',
+          PATH: customPath,
+        },
+        stdio: 'pipe',
+        cwd: path.dirname(serverPath),
       });
-  });
+
+      serverProcess.stdout?.on('data', (data: Buffer) => {
+        console.log(`[Next.js Server]: ${data.toString().trim()}`);
+      });
+
+      serverProcess.stderr?.on('data', (data: Buffer) => {
+        const line = data.toString().trim();
+        serverStderr += line + '\n';
+        console.error(`[Next.js Server Error]: ${line}`);
+      });
+
+      serverProcess.on('exit', (code: number) => {
+        console.log(`Next.js server exited with code: ${code}`);
+        if (!isReady) {
+          reject(new Error(`Server proses berhenti tiba-tiba dengan exit code: ${code}.\n${serverStderr}`));
+        }
+      });
+
+      waitForServerReady(port)
+        .then(() => {
+          isReady = true;
+          console.log(`Next.js backend server successfully listening and healthy on port ${port}!`);
+          resolve();
+        })
+        .catch((err) => {
+          reject(new Error(`${err.message}\n${serverStderr}`));
+        });
+    });
+
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    try {
+      await attemptForkServer();
+      return;
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (attempt < 12 && (msg.includes('ERR_MODULE_NOT_FOUND') || msg.includes('Cannot find package'))) {
+        console.warn(`[startBackendServer] Waiting for update extraction to complete (attempt ${attempt}/12)...`);
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function getSplashPath(): string {

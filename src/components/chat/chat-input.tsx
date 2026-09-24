@@ -128,6 +128,9 @@ interface ChatInputProps {
   onOpenBrowser?: (url: string) => void;
   onRefreshModels?: () => void;
   queuedMessagesMode?: 'queue' | 'immediately';
+  sessionId?: string | null;
+  initialDraft?: string | null;
+  onDraftChange?: (draft: string) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -147,6 +150,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isCentered = false,
   onOpenBrowser,
   onRefreshModels,
+  sessionId,
+  initialDraft,
+  onDraftChange,
 }) => {
   const [isTaskBarExpanded, setIsTaskBarExpanded] = useState(true);
   const [showMentions, setShowMentions] = useState(false);
@@ -753,6 +759,221 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return [...base, ...skills];
   }, [loadedSkills]);
 
+  const draftStorageKey = React.useMemo(
+    () => (sessionId ? `aidev_draft_sess_${sessionId}` : `aidev_draft_proj_${workdir || 'default'}`),
+    [sessionId, workdir]
+  );
+  const isRestoringDraftRef = useRef(false);
+  const wasClearedBySubmitRef = useRef(false);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDraftPayloadRef = useRef<string>('');
+  const onDraftChangeRef = useRef(onDraftChange);
+  const chipsRef = useRef<InlineChipItem[]>(chips);
+  const attachedImagesRef = useRef<AttachedImage[]>(attachedImages);
+
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange;
+  }, [onDraftChange]);
+  useEffect(() => {
+    chipsRef.current = chips;
+  }, [chips]);
+  useEffect(() => {
+    attachedImagesRef.current = attachedImages;
+  }, [attachedImages]);
+
+  const syncDraftToServer = useCallback(
+    (targetSessionId: string | null | undefined, draftValue: string, immediate = false) => {
+      if (!targetSessionId) return;
+      if (draftSyncTimerRef.current) {
+        clearTimeout(draftSyncTimerRef.current);
+        draftSyncTimerRef.current = null;
+      }
+      const sendPatch = () => {
+        fetch(`/api/sessions/${targetSessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft_prompt: draftValue }),
+          keepalive: true,
+        }).catch(() => {});
+      };
+      if (immediate) {
+        sendPatch();
+      } else {
+        draftSyncTimerRef.current = setTimeout(sendPatch, 400);
+      }
+    },
+    []
+  );
+
+  const clearSessionDraft = useCallback(() => {
+    isRestoringDraftRef.current = true;
+    wasClearedBySubmitRef.current = true;
+    if (draftSyncTimerRef.current) {
+      clearTimeout(draftSyncTimerRef.current);
+      draftSyncTimerRef.current = null;
+    }
+    latestDraftPayloadRef.current = '';
+    try {
+      localStorage.removeItem(draftStorageKey);
+      if (workdir) {
+        localStorage.removeItem(`aidev_draft_proj_${workdir}`);
+      }
+      localStorage.removeItem('aidev_draft_proj_default');
+    } catch {}
+    onDraftChangeRef.current?.('');
+    syncDraftToServer(sessionId, '', true);
+    setTimeout(() => {
+      isRestoringDraftRef.current = false;
+    }, 50);
+  }, [draftStorageKey, workdir, sessionId, syncDraftToServer]);
+
+  const persistCurrentEditorDraft = useCallback(() => {
+    if (isRestoringDraftRef.current) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const hasChips = !!editor.querySelector('[data-chip-id]');
+    const cleanText = (editor.textContent || '').replace(/[\u00A0\r\n\t]/g, '');
+    const currentImgs = attachedImagesRef.current;
+
+    if (!hasChips && cleanText.length === 0 && currentImgs.length === 0) {
+      if (latestDraftPayloadRef.current !== '') {
+        latestDraftPayloadRef.current = '';
+        try {
+          localStorage.removeItem(draftStorageKey);
+        } catch {}
+        onDraftChangeRef.current?.('');
+        syncDraftToServer(sessionId, '');
+      }
+      return;
+    }
+
+    const payload = JSON.stringify({
+      html: editor.innerHTML,
+      text: editor.textContent || '',
+      chips: chipsRef.current,
+      attachedImages: currentImgs,
+    });
+
+    if (payload === latestDraftPayloadRef.current) return;
+    latestDraftPayloadRef.current = payload;
+
+    try {
+      localStorage.setItem(draftStorageKey, payload);
+    } catch {}
+    onDraftChangeRef.current?.(payload);
+    syncDraftToServer(sessionId, payload);
+  }, [draftStorageKey, sessionId, syncDraftToServer]);
+
+  // Flush pending SQLite draft on window reload / close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionId && draftSyncTimerRef.current) {
+        clearTimeout(draftSyncTimerRef.current);
+        draftSyncTimerRef.current = null;
+        fetch(`/api/sessions/${sessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft_prompt: latestDraftPayloadRef.current }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sessionId]);
+
+  // Restore draft strictly on session switch or initial hydration (never overwrite after submit)
+  const prevDraftKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const isSessionSwitch = prevDraftKeyRef.current !== draftStorageKey;
+    if (isSessionSwitch) {
+      prevDraftKeyRef.current = draftStorageKey;
+      wasClearedBySubmitRef.current = false;
+      hydratedDraftKeyRef.current = null;
+    }
+
+    // Never re-populate editor if user already submitted/cleared in this session
+    if (wasClearedBySubmitRef.current) return;
+
+    // If we already hydrated this session key and this isn't a session switch, ignore prop echoes
+    if (!isSessionSwitch && hydratedDraftKeyRef.current === draftStorageKey) return;
+
+    let rawDraft = '';
+    try {
+      rawDraft = localStorage.getItem(draftStorageKey) || '';
+      if (!rawDraft && sessionId) {
+        const projKey = `aidev_draft_proj_${workdir || 'default'}`;
+        const projDraft = localStorage.getItem(projKey);
+        if (projDraft) {
+          rawDraft = projDraft;
+          localStorage.setItem(draftStorageKey, projDraft);
+          localStorage.removeItem(projKey);
+        }
+      }
+    } catch {}
+
+    if (!rawDraft && initialDraft) {
+      rawDraft = initialDraft;
+      try {
+        localStorage.setItem(draftStorageKey, rawDraft);
+      } catch {}
+    }
+
+    if (!isSessionSwitch) {
+      const currentClean = (editor.textContent || '').replace(/[\u00A0\r\n\t]/g, '');
+      if (currentClean.length > 0 || !rawDraft) return;
+    }
+
+    hydratedDraftKeyRef.current = draftStorageKey;
+    isRestoringDraftRef.current = true;
+    if (rawDraft) {
+      try {
+        const parsed = JSON.parse(rawDraft);
+        if (parsed && typeof parsed === 'object' && ('html' in parsed || 'text' in parsed)) {
+          editor.innerHTML = parsed.html || parsed.text || '';
+          const restoredChips = Array.isArray(parsed.chips) ? parsed.chips : [];
+          const restoredImgs = Array.isArray(parsed.attachedImages) ? parsed.attachedImages : [];
+          setChips(restoredChips);
+          setAttachedImages(restoredImgs);
+          const hasChips = !!editor.querySelector('[data-chip-id]');
+          const clean = (editor.textContent || '').replace(/[\u00A0\r\n\t]/g, '');
+          setIsEmpty(!hasChips && clean.length === 0 && restoredImgs.length === 0);
+          latestDraftPayloadRef.current = rawDraft;
+        } else {
+          editor.textContent = String(rawDraft);
+          setIsEmpty(String(rawDraft).trim().length === 0);
+          latestDraftPayloadRef.current = rawDraft;
+        }
+      } catch {
+        editor.textContent = rawDraft;
+        setIsEmpty(rawDraft.trim().length === 0);
+        latestDraftPayloadRef.current = rawDraft;
+      }
+    } else if (isSessionSwitch) {
+      editor.innerHTML = '';
+      setChips((prev) => (prev.length === 0 ? prev : []));
+      setAttachedImages((prev) => (prev.length === 0 ? prev : []));
+      setIsEmpty(true);
+      latestDraftPayloadRef.current = '';
+    }
+
+    setTimeout(() => {
+      isRestoringDraftRef.current = false;
+    }, 50);
+  }, [draftStorageKey, initialDraft, sessionId, workdir]);
+
+  // Also persist draft when attachedImages or chips change due to user action
+  useEffect(() => {
+    if (!isRestoringDraftRef.current && !wasClearedBySubmitRef.current) {
+      persistCurrentEditorDraft();
+    }
+  }, [attachedImages, chips, persistCurrentEditorDraft]);
+
   // Two-way synchronization: MutationObserver watches editor DOM to detect removed chips (e.g. keyboard Backspace / Delete) and track empty state
   useEffect(() => {
     const editor = editorRef.current;
@@ -768,6 +989,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const observer = new MutationObserver(() => {
       updateEmptyState();
+      persistCurrentEditorDraft();
       setChips((prevChips) => {
         const remainingChips = prevChips.filter((c) => document.getElementById(c.id));
         if (remainingChips.length !== prevChips.length) {
@@ -787,7 +1009,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     observer.observe(editor, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
-  }, []);
+  }, [persistCurrentEditorDraft]);
 
   useEffect(() => {
     const handleRestorePrompt = (e: Event) => {
@@ -795,10 +1017,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const text = customEvent.detail?.text;
       const editor = editorRef.current;
       if (!editor || typeof text !== 'string') return;
+      wasClearedBySubmitRef.current = false;
       editor.textContent = text;
       setIsEmpty(text.trim().length === 0);
       hasEverInteractedRef.current = true;
       setTimeout(() => {
+        persistCurrentEditorDraft();
         if (!editorRef.current) return;
         editorRef.current.focus();
         const sel = window.getSelection();
@@ -812,7 +1036,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     window.addEventListener('aidev-restore-prompt', handleRestorePrompt);
     return () => window.removeEventListener('aidev-restore-prompt', handleRestorePrompt);
-  }, []);
+  }, [persistCurrentEditorDraft]);
 
   const filteredFiles = workspaceFiles
     .filter((f) => f.toLowerCase().includes(mentionQuery.toLowerCase()))
@@ -1107,6 +1331,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } else {
       setShowMentions(false);
     }
+
+    wasClearedBySubmitRef.current = false;
+    persistCurrentEditorDraft();
   };
 
   // Extract plain text string with @filename and [gambar:id] for submission
@@ -1157,23 +1384,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = () => {
     const prompt = getEditorContent();
-    if (!prompt && attachedImages.length === 0) return;
+    const imagesToSend = [...attachedImages];
+    if (!prompt && imagesToSend.length === 0) return;
+
+    // Clear editor DOM and state FIRST so no effect or re-render can read stale text
+    wasClearedBySubmitRef.current = true;
+    isRestoringDraftRef.current = true;
+    if (editorRef.current) {
+      editorRef.current.innerHTML = '';
+    }
+    setChips([]);
+    setAttachedImages([]);
+    setShowMentions(false);
+    setShowSlashCommands(false);
+    setIsEmpty(true);
+    clearSessionDraft();
 
     // Direct /usage prompt submission
     if (prompt.trim() === '/usage') {
-      if (editorRef.current) {
-        editorRef.current.innerHTML = '';
-      }
-      setChips([]);
-      setAttachedImages([]);
-      setShowMentions(false);
-      setShowSlashCommands(false);
-      setIsEmpty(true);
       handleFetchUsage();
       return;
     }
 
-    onSendMessage(prompt, attachedImages);
+    onSendMessage(prompt, imagesToSend);
 
     // On mobile, blur to dismiss virtual keyboard after sending
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
@@ -1187,16 +1420,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         focusEditorSafely();
       }, 15);
     }
-
-    // Clear editor
-    if (editorRef.current) {
-      editorRef.current.innerHTML = '';
-    }
-    setChips([]);
-    setAttachedImages([]);
-    setShowMentions(false);
-    setShowSlashCommands(false);
-    setIsEmpty(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {

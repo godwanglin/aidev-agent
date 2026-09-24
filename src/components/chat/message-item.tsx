@@ -748,7 +748,7 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
 
     return (
       <div className={`${chatWidthClass} mx-auto w-full px-4 pt-2.5 pb-2 select-none group/user`}>
-        <div className="rounded-xl bg-[#1c1c1c] border border-[#262626] px-3.5 py-2 text-[13px] text-[#cccccc] font-sans leading-normal shadow-sm select-text">
+        <div className="relative rounded-xl bg-[#1c1c1c] border border-[#262626] px-3.5 py-2 text-[13px] text-[#cccccc] font-sans leading-normal shadow-sm select-text">
           {attachedImages.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2 pb-2 border-b border-[#262626]">
               {attachedImages.map((img, idx) => (
@@ -781,6 +781,57 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
             const isLongUserMessage = userLinesCount > 6 || processedUserText.length > 380;
             const isCollapsed = isLongUserMessage && !isUserBubbleExpanded;
             const approxLines = Math.max(userLinesCount, Math.ceil(processedUserText.length / 85));
+
+            const actionButtonsNode = (
+              <div
+                className={`flex items-center justify-end gap-2.5 select-none text-[#787878] transition-opacity duration-150 ${
+                  !isLongUserMessage
+                    ? 'absolute right-3 bottom-1.5 bg-[#1c1c1c]/95 backdrop-blur-xs pl-2.5 py-0.5 rounded-md'
+                    : ''
+                } ${
+                  confirmRevert || copied
+                    ? 'opacity-100 pointer-events-auto'
+                    : 'opacity-0 pointer-events-none group-hover/user:opacity-100 group-hover/user:pointer-events-auto'
+                }`}
+              >
+                {timestampStr && (
+                  <span className="text-[11.5px] font-sans text-[#787878] tracking-tight">
+                    {timestampStr}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleCopy(cleanCopyContent)}
+                  className="p-0.5 rounded hover:text-[#e4e4e7] transition cursor-pointer"
+                  title="Salin pesan"
+                >
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-[#7aae66]" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                {onRevertTurn && (
+                  <button
+                    type="button"
+                    disabled={isReverting}
+                    onClick={() => setConfirmRevert((prev) => !prev)}
+                    className={`p-0.5 rounded transition cursor-pointer ${
+                      confirmRevert
+                        ? 'text-amber-400 bg-amber-500/10'
+                        : 'hover:text-[#e4e4e7]'
+                    }`}
+                    title="Revert / Restore checkpoint ke titik pesan ini"
+                  >
+                    {isReverting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <Undo2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
+              </div>
+            );
 
             return (
               <>
@@ -817,75 +868,30 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
                   )}
                 </div>
 
-                {/* Inline Bottom Action Bar inside User Bubble (Expand/Collapse on left · Timestamp + Copy + Revert on right on hover) */}
-                <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 select-none text-[#787878]">
-                  <div>
-                    {isLongUserMessage && (
-                      <button
-                        type="button"
-                        onClick={() => setIsUserBubbleExpanded((prev) => !prev)}
-                        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#8e8e98] hover:text-[#e4e4e7] transition cursor-pointer"
-                      >
-                        {isUserBubbleExpanded ? (
-                          <>
-                            <ChevronUp className="w-3.5 h-3.5" />
-                            <span>Sembunyikan</span>
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="w-3.5 h-3.5" />
-                            <span>Tampilkan semua ({approxLines} baris)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  <div
-                    className={`flex items-center justify-end gap-2.5 transition-opacity duration-150 ${
-                      confirmRevert || copied
-                        ? 'opacity-100 pointer-events-auto'
-                        : 'opacity-0 pointer-events-none group-hover/user:opacity-100 group-hover/user:pointer-events-auto'
-                    }`}
-                  >
-                    {timestampStr && (
-                      <span className="text-[11.5px] font-sans text-[#787878] tracking-tight">
-                        {timestampStr}
-                      </span>
-                    )}
+                {isLongUserMessage ? (
+                  <div className="flex items-center justify-between gap-2 mt-1.5 pt-0.5 select-none text-[#787878]">
                     <button
                       type="button"
-                      onClick={() => handleCopy(cleanCopyContent)}
-                      className="p-0.5 rounded hover:text-[#e4e4e7] transition cursor-pointer"
-                      title="Salin pesan"
+                      onClick={() => setIsUserBubbleExpanded((prev) => !prev)}
+                      className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#8e8e98] hover:text-[#e4e4e7] transition cursor-pointer"
                     >
-                      {copied ? (
-                        <Check className="w-3.5 h-3.5 text-[#7aae66]" />
+                      {isUserBubbleExpanded ? (
+                        <>
+                          <ChevronUp className="w-3.5 h-3.5" />
+                          <span>Sembunyikan</span>
+                        </>
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                          <span>Tampilkan semua ({approxLines} baris)</span>
+                        </>
                       )}
                     </button>
-                    {onRevertTurn && (
-                      <button
-                        type="button"
-                        disabled={isReverting}
-                        onClick={() => setConfirmRevert((prev) => !prev)}
-                        className={`p-0.5 rounded transition cursor-pointer ${
-                          confirmRevert
-                            ? 'text-amber-400 bg-amber-500/10'
-                            : 'hover:text-[#e4e4e7]'
-                        }`}
-                        title="Revert / Restore checkpoint ke titik pesan ini"
-                      >
-                        {isReverting ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                        ) : (
-                          <Undo2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    )}
+                    {actionButtonsNode}
                   </div>
-                </div>
+                ) : (
+                  actionButtonsNode
+                )}
               </>
             );
           })()}

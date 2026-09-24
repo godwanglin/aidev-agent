@@ -1,4 +1,17 @@
+!macro customInstallMode
+  ${if} ${isUpdated}
+    ${if} $hasPerMachineInstallation == "1"
+      StrCpy $isForceMachineInstall "1"
+    ${else}
+      StrCpy $isForceCurrentInstall "1"
+    ${endIf}
+  ${endIf}
+!macroend
+
 !macro customInstall
+  SetDetailsPrint both
+  DetailPrint "Menyelesaikan pemasangan file Aidev Desktop..."
+
   ${ifNot} ${isUpdated}
     DetailPrint "Registering Aidev CLI to PATH..."
     ReadRegStr $0 HKCU "Environment" "Path"
@@ -16,6 +29,13 @@
   WriteRegStr HKCU "Software\Classes\aidev" "URL Protocol" ""
   WriteRegStr HKCU "Software\Classes\aidev\DefaultIcon" "" "$INSTDIR\Aidev.exe,0"
   WriteRegStr HKCU "Software\Classes\aidev\shell\open\command" "" '"$INSTDIR\Aidev.exe" "%1"'
+
+  ${if} ${isUpdated}
+    DetailPrint "Membuka kembali Aidev Desktop..."
+    HideWindow
+    Exec '"$INSTDIR\Aidev.exe" --updated'
+    !insertmacro quitSuccess
+  ${endIf}
 !macroend
 
 !macro customUnInstall

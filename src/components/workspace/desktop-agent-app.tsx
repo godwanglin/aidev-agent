@@ -654,10 +654,16 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     loadProjectData();
   }, [currentProject, allSessions]);
 
+  const allSessionsRef = useRef<SessionRecord[]>(allSessions);
+  useEffect(() => {
+    allSessionsRef.current = allSessions;
+  }, [allSessions]);
+  const lastStreamDoneAtRef = useRef<number>(0);
+
   // 3. Session Change: Load Message History & Workspace Inspector Data
   const refreshSessionData = useCallback(async (options?: { skipMessages?: boolean; forceMessages?: boolean; targetSessionId?: string }) => {
     const activeSession = options?.targetSessionId
-      ? (allSessions.find((s) => s.id === options.targetSessionId) ||
+      ? (allSessionsRef.current.find((s) => s.id === options.targetSessionId) ||
          (currentSessionRef.current?.id === options.targetSessionId ? currentSessionRef.current : null) ||
          ({ id: options.targetSessionId } as SessionRecord))
       : (currentSessionRef.current || currentSession);
@@ -682,6 +688,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       if (isDifferentSession && !options?.skipMessages) {
         setIsLoadingSession(true);
       }
+      const fetchStartedAt = Date.now();
       const detailRes = await fetch(`/api/sessions/${sessionId}`);
       const detailData = await detailRes.json();
       if (detailData.compactions) {
@@ -689,8 +696,14 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       } else {
         setCompactions([]);
       }
-      if (detailData.isRunning) {
+      if (
+        detailData.isRunning &&
+        fetchStartedAt > lastStreamDoneAtRef.current &&
+        Date.now() - lastStreamDoneAtRef.current > 1200
+      ) {
         setIsStreaming(true);
+      } else if (!detailData.isRunning && !isStreamingRef.current) {
+        setIsStreaming(false);
       }
       lastLoadedSessionIdRef.current = sessionId;
       if (typeof detailData.hasMore === 'boolean') {
@@ -874,7 +887,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     } finally {
       setIsLoadingSession(false);
     }
-  }, [currentSession, currentProject, allSessions]);
+  }, [currentSession?.id, currentProject?.id]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!currentSession?.id || isLoadingOlderMessages || !hasMoreMessages || messages.length === 0) {
@@ -2148,6 +2161,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
               } else if (event.type === 'error') {
                 if (activeStreamIdRef.current !== currentStreamId) return;
                 isDoneHandled = true;
+                lastStreamDoneAtRef.current = Date.now();
                 const errorMessage = event.data?.message || 'An unexpected error occurred.';
                 isStreamingRef.current = false;
                 setIsStreaming(false);
@@ -2175,6 +2189,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
               } else if (event.type === 'done') {
                 if (activeStreamIdRef.current !== currentStreamId) return;
                 isDoneHandled = true;
+                lastStreamDoneAtRef.current = Date.now();
                 isStreamingRef.current = false;
                 setIsStreaming(false);
                 setPendingPermission(null);
@@ -2221,6 +2236,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       // If stream finished without receiving an explicit 'done' event:
       if (!isDoneHandled && activeStreamIdRef.current === currentStreamId) {
         isDoneHandled = true;
+        lastStreamDoneAtRef.current = Date.now();
         isStreamingRef.current = false;
         setIsStreaming(false);
         setPendingPermission(null);
@@ -2246,6 +2262,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       }
     } finally {
       if (activeStreamIdRef.current === currentStreamId) {
+        lastStreamDoneAtRef.current = Date.now();
         isStreamingRef.current = false;
         setIsStreaming(false);
         setStreamingContent('');
@@ -4209,6 +4226,21 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenBrowser={handleOpenBrowserTab}
                 onOpenReview={handleOpenReview}
                 onSendMessage={handleSendMessage}
+                sessionId={currentSession?.id || null}
+                sessionDraft={currentSession?.draft_prompt || null}
+                onDraftChange={(draftVal) => {
+                  const sid = currentSession?.id;
+                  if (!sid) return;
+                  setCurrentSession((prev) => {
+                    if (!prev || prev.id !== sid || (prev.draft_prompt || '') === draftVal) return prev;
+                    return { ...prev, draft_prompt: draftVal };
+                  });
+                  setSessions((prev) => {
+                    const target = prev.find((s) => s.id === sid);
+                    if (!target || (target.draft_prompt || '') === draftVal) return prev;
+                    return prev.map((s) => (s.id === sid ? { ...s, draft_prompt: draftVal } : s));
+                  });
+                }}
                 onContinueTurn={(errId) => {
                   setMessages((prev) => prev.filter((m) => m.id !== errId && m.status !== 'ERROR'));
                   handleSendMessage('__CONTINUE_TURN__');
@@ -4305,6 +4337,8 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenFile={openFileTab}
                 onOpenBrowser={handleOpenBrowserTab}
                 onSendMessage={handleSendSplitMessage}
+                sessionId={splitSession?.id || null}
+                sessionDraft={splitSession?.draft_prompt || null}
                 onContinueTurn={(errId) => {
                   setSplitMessages((prev) => prev.filter((m) => m.id !== errId && m.status !== 'ERROR'));
                   handleSendSplitMessage('__CONTINUE_TURN__');

@@ -88,6 +88,9 @@ interface ChatWorkspaceProps {
   verboseChat?: boolean;
   onContinueTurn?: (errorMessageId: string) => void;
   onRevertTurn?: (message: MessageRecord, promptText: string) => Promise<void> | void;
+  sessionId?: string | null;
+  sessionDraft?: string | null;
+  onDraftChange?: (draft: string) => void;
 }
 
 export interface TurnSegment {
@@ -191,6 +194,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   verboseChat = true,
   onContinueTurn,
   onRevertTurn,
+  sessionId,
+  sessionDraft,
+  onDraftChange,
 }) => {
   const { chatWidthClass } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -555,6 +561,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 onAbortTask={onAbortTask}
                 onOpenTask={onOpenTask}
                 queuedMessagesMode={queuedMessagesMode}
+                sessionId={sessionId || messages[0]?.session_id || null}
+                initialDraft={sessionDraft}
+                onDraftChange={onDraftChange}
               />
             </div>
           </div>
@@ -1135,6 +1144,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onOpenBrowser={onOpenBrowser}
             onRefreshModels={onRefreshModels}
             queuedMessagesMode={queuedMessagesMode}
+            sessionId={sessionId || messages[0]?.session_id || null}
+            initialDraft={sessionDraft}
+            onDraftChange={onDraftChange}
           />
         </div>
       )}

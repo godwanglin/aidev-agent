@@ -918,12 +918,14 @@ export class AgentOrchestrator {
         }
 
         keepRunning = false;
+        activeOrchestrators.delete(this.sessionId);
         this.onEvent({ type: 'done', data: { status: 'COMPLETED' } });
         break;
       }
 
       if (this.isAborted) {
         keepRunning = false;
+        activeOrchestrators.delete(this.sessionId);
         this.onEvent({ type: 'done', data: { status: 'STOPPED' } });
         return;
       }

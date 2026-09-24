@@ -20,6 +20,7 @@ export interface SessionRecord {
   created_at: number;
   updated_at: number;
   is_unread?: number;
+  draft_prompt?: string;
 }
 
 export interface MessageRecord {
@@ -242,6 +243,12 @@ export function getDb(): DatabaseSync {
     // Column already exists
   }
 
+  try {
+    dbInstance.exec('ALTER TABLE sessions ADD COLUMN draft_prompt TEXT DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+
   return dbInstance;
 }
 
@@ -410,8 +417,13 @@ export const sessionRepo = {
       }
     }
     if (fields.length === 0) return;
-    fields.push('updated_at = ?');
-    values.push(Date.now());
+    const shouldBumpUpdatedAt = Object.keys(updates).some(
+      (k) => k !== 'id' && k !== 'draft_prompt' && k !== 'is_unread' && k !== 'updated_at'
+    );
+    if (shouldBumpUpdatedAt) {
+      fields.push('updated_at = ?');
+      values.push(Date.now());
+    }
     values.push(id);
     const stmt = db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`);
     stmt.run(...values);
