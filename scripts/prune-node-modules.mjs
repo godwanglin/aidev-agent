@@ -62,15 +62,6 @@ const HEAVY_BUILD_ONLY_PATHS = [
   'autoprefixer',
   'tsup',
   '@rollup',
-  'next/dist/esm',
-  'next/dist/docs',
-  'next/dist/bundle-analyzer',
-  'next/dist/next-devtools',
-  'next/dist/compiled/react-dom-experimental',
-  'next/dist/compiled/next-devtools',
-  'next/dist/compiled/webpack',
-  'next/dist/compiled/babel',
-  'next/dist/compiled/babel-packages',
 ];
 
 for (const rel of HEAVY_BUILD_ONLY_PATHS) {
