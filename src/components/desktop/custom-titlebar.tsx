@@ -949,7 +949,7 @@ export function CustomTitlebar() {
             <div>
               <h3 className="text-base font-semibold text-white">Aidev Desktop</h3>
               <p className="text-xs text-[#a1a1aa] mt-0.5">Autonomous Local AI Coding Agent</p>
-              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.7</p>
+              <p className="text-[11px] font-mono text-[#71717a] mt-1">Version 1.0.8</p>
             </div>
             {updateStatus.status === 'checking' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/10 text-[11px] text-[#a1a1aa]">
@@ -960,7 +960,7 @@ export function CustomTitlebar() {
             {updateStatus.status === 'not-available' && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/25 text-[11px] text-[#4ade80]">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Sudah menggunakan versi terbaru (v1.0.7)</span>
+                <span>Sudah menggunakan versi terbaru (v1.0.8)</span>
               </div>
             )}
             <p className="text-xs text-[#d4d4d8] leading-relaxed">
