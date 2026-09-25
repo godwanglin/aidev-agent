@@ -849,7 +849,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           {/* Code Content */}
           <div
             style={{ fontSize: `${fontSize}px`, lineHeight: `${lineHeight}px` }}
-            className="flex-1 min-w-0 pl-1 pr-10 overflow-x-auto whitespace-pre font-mono font-[450] text-[#eceff4] relative subpixel-antialiased"
+            className="flex-1 min-w-0 pl-1 pr-10 overflow-x-auto whitespace-pre font-mono font-normal text-[#eceff4] relative antialiased"
           >
             {renderCodeLine(l.content, l.id)}
           </div>
@@ -869,25 +869,25 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
         {/* Inline Comment Widget */}
         {isCommentOpen && (
-          <div className="my-2 mx-6 p-3 rounded-xl bg-[#181818] border border-[#2a2a2a] shadow-2xl space-y-2.5 animate-dropdown select-none">
+          <div className="my-1.5 ml-10 mr-auto max-w-[440px] w-[calc(100%-48px)] min-w-[260px] p-2.5 rounded-xl bg-[#15161a] border border-[#282a32] shadow-xl space-y-2 animate-dropdown select-none">
             {/* Header */}
-            <div className="flex items-center justify-between text-xs pb-1.5 border-b border-[#262626]">
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10.5px] font-medium border border-[#007acc]/30">
-                  <MessageSquare className="w-3 h-3" />
+            <div className="flex items-center justify-between text-xs pb-1 border-b border-[#23252d]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10px] font-medium border border-[#007acc]/30 shrink-0">
+                  <MessageSquare className="w-2.5 h-2.5" />
                   Line {lineNum} ({l.type})
                 </span>
-                <span className="text-[#8c8c8c] text-[11px] font-mono truncate max-w-[320px]">
+                <span className="text-[#8c8c8c] text-[10.5px] font-mono truncate max-w-[200px]">
                   {l.content.trim() || '(empty line)'}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => cancelComment(l.id)}
-                className="p-1 rounded text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer"
-                title="Cancel comment"
+                className="w-5 h-5 rounded flex items-center justify-center text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer shrink-0"
+                title="Cancel"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
             </div>
 
@@ -908,14 +908,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                   cancelComment(l.id);
                 }
               }}
-              placeholder="Ask AI about this diff line or give instructions... (Ctrl+Enter to send)"
-              rows={2}
-              className="w-full bg-[#121212] border border-[#262626] rounded-lg p-2.5 text-[12px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-relaxed select-text"
+              placeholder="Ask AI about this diff line... (Ctrl+Enter)"
+              rows={1}
+              className="w-full bg-[#101114] border border-[#23252d] rounded-lg p-2 text-[11.5px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-normal select-text min-h-[32px] max-h-[80px]"
             />
 
             {/* Quick suggestion chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] pb-0.5">
-              {['Explain this change', 'Refactor this logic', 'Check for regressions', 'Add unit test'].map(
+            <div className="flex flex-wrap items-center gap-1 text-[10px]">
+              {['Explain', 'Refactor', 'Check bugs', 'Add test'].map(
                 (chip) => (
                   <button
                     key={chip}
@@ -927,7 +927,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                         [l.id]: cur ? `${cur} ${chip}` : chip,
                       });
                     }}
-                    className="px-2 py-0.5 rounded-md bg-[#202020] hover:bg-[#262626] text-[#9d9d9d] hover:text-[#cccccc] border border-[#282828] whitespace-nowrap transition cursor-pointer text-[10.5px]"
+                    className="px-1.5 py-0.5 rounded bg-[#1c1d22] hover:bg-[#25272e] text-[#9d9d9d] hover:text-[#cccccc] border border-[#2a2c35] transition cursor-pointer text-[10px]"
                   >
                     {chip}
                   </button>
@@ -936,11 +936,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             </div>
 
             {/* Action Buttons: Cancel or Add to Chat */}
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-0.5">
               <button
                 type="button"
                 onClick={() => cancelComment(l.id)}
-                className="px-2.5 py-1 text-xs text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded-md transition cursor-pointer"
+                className="px-2 py-0.5 text-[11px] text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -949,14 +949,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 type="button"
                 onClick={() => handleSendComment(l.id, lineNum, l.content)}
                 disabled={!commentTexts[l.id]?.trim()}
-                className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition shadow-sm ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition shadow-sm ${
                   commentTexts[l.id]?.trim()
                     ? 'bg-[#007acc] hover:bg-[#0086e6] text-white cursor-pointer active:scale-95'
-                    : 'bg-[#222226] text-[#666666] cursor-not-allowed'
+                    : 'bg-[#1f2025] text-[#555555] cursor-not-allowed'
                 }`}
-                title="Add diff snippet and comment as context chip in chat input"
+                title="Add to Chat (Ctrl+Enter)"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3 h-3" />
                 <span>Add to Chat</span>
               </button>
             </div>
@@ -1074,7 +1074,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             </div>
             <div
               style={{ fontSize: `${fontSize}px`, lineHeight: `${lineHeight}px` }}
-              className="flex-1 min-w-0 pl-1 pr-3 overflow-x-auto whitespace-pre font-mono text-[#cccccc] subpixel-antialiased"
+              className="flex-1 min-w-0 pl-1 pr-3 overflow-x-auto whitespace-pre font-mono font-normal text-[#eceff4] antialiased"
             >
               {r.left.type !== 'empty' && renderCodeLine(r.left.content, `${r.id}_L`)}
             </div>
@@ -1094,7 +1094,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             </div>
             <div
               style={{ fontSize: `${fontSize}px`, lineHeight: `${lineHeight}px` }}
-              className="flex-1 min-w-0 pl-1 pr-10 overflow-x-auto whitespace-pre font-mono text-[#cccccc] subpixel-antialiased"
+              className="flex-1 min-w-0 pl-1 pr-10 overflow-x-auto whitespace-pre font-mono font-normal text-[#eceff4] antialiased"
             >
               {r.right.type !== 'empty' && renderCodeLine(r.right.content, `${r.id}_R`)}
             </div>
@@ -1115,25 +1115,25 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
         {/* Inline Comment Widget Spanning 2 Columns in Split Grid */}
         {isCommentOpen && (
-          <div className="col-span-2 my-2 mx-6 p-3 rounded-xl bg-[#181818] border border-[#2a2a2a] shadow-2xl space-y-2.5 animate-dropdown select-none">
+          <div className="col-span-2 my-1.5 ml-10 mr-auto max-w-[440px] w-[calc(100%-48px)] min-w-[260px] p-2.5 rounded-xl bg-[#15161a] border border-[#282a32] shadow-xl space-y-2 animate-dropdown select-none">
             {/* Header */}
-            <div className="flex items-center justify-between text-xs pb-1.5 border-b border-[#262626]">
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10.5px] font-medium border border-[#007acc]/30">
-                  <MessageSquare className="w-3 h-3" />
+            <div className="flex items-center justify-between text-xs pb-1 border-b border-[#23252d]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10px] font-medium border border-[#007acc]/30 shrink-0">
+                  <MessageSquare className="w-2.5 h-2.5" />
                   Line {lineNum}
                 </span>
-                <span className="text-[#8c8c8c] text-[11px] font-mono truncate max-w-[320px]">
+                <span className="text-[#8c8c8c] text-[10.5px] font-mono truncate max-w-[200px]">
                   {content.trim() || '(empty line)'}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => cancelComment(r.id)}
-                className="p-1 rounded text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer"
-                title="Cancel comment"
+                className="w-5 h-5 rounded flex items-center justify-center text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer shrink-0"
+                title="Cancel"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
             </div>
 
@@ -1154,14 +1154,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                   cancelComment(r.id);
                 }
               }}
-              placeholder="Ask AI about this diff change or give instructions... (Ctrl+Enter to send)"
-              rows={2}
-              className="w-full bg-[#121212] border border-[#262626] rounded-lg p-2.5 text-[12px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-relaxed select-text"
+              placeholder="Ask AI about this diff change... (Ctrl+Enter)"
+              rows={1}
+              className="w-full bg-[#101114] border border-[#23252d] rounded-lg p-2 text-[11.5px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-normal select-text min-h-[32px] max-h-[80px]"
             />
 
             {/* Quick suggestion chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] pb-0.5">
-              {['Explain this change', 'Refactor this logic', 'Check for regressions', 'Add unit test'].map(
+            <div className="flex flex-wrap items-center gap-1 text-[10px]">
+              {['Explain', 'Refactor', 'Check bugs', 'Add test'].map(
                 (chip) => (
                   <button
                     key={chip}
@@ -1173,7 +1173,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                         [r.id]: cur ? `${cur} ${chip}` : chip,
                       });
                     }}
-                    className="px-2 py-0.5 rounded-md bg-[#202020] hover:bg-[#262626] text-[#9d9d9d] hover:text-[#cccccc] border border-[#282828] whitespace-nowrap transition cursor-pointer text-[10.5px]"
+                    className="px-1.5 py-0.5 rounded bg-[#1c1d22] hover:bg-[#25272e] text-[#9d9d9d] hover:text-[#cccccc] border border-[#2a2c35] transition cursor-pointer text-[10px]"
                   >
                     {chip}
                   </button>
@@ -1182,11 +1182,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             </div>
 
             {/* Action Buttons: Cancel or Add to Chat */}
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-0.5">
               <button
                 type="button"
                 onClick={() => cancelComment(r.id)}
-                className="px-2.5 py-1 text-xs text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded-md transition cursor-pointer"
+                className="px-2 py-0.5 text-[11px] text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -1195,14 +1195,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 type="button"
                 onClick={() => handleSendComment(r.id, lineNum, content)}
                 disabled={!commentTexts[r.id]?.trim()}
-                className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition shadow-sm ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition shadow-sm ${
                   commentTexts[r.id]?.trim()
                     ? 'bg-[#007acc] hover:bg-[#0086e6] text-white cursor-pointer active:scale-95'
-                    : 'bg-[#222226] text-[#666666] cursor-not-allowed'
+                    : 'bg-[#1f2025] text-[#555555] cursor-not-allowed'
                 }`}
-                title="Add diff snippet and comment as context chip in chat input"
+                title="Add to Chat (Ctrl+Enter)"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3 h-3" />
                 <span>Add to Chat</span>
               </button>
             </div>

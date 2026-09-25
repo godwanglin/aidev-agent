@@ -47,9 +47,9 @@ body {
   overflow: hidden;
   letter-spacing: -0.01em;
   line-height: 1.5;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Fira Code HD Programming Ligatures for all code & terminal elements */
@@ -57,10 +57,10 @@ code, pre, .font-mono, .xterm {
   font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace !important;
   font-feature-settings: 'calt' 1, 'liga' 1;
   font-variant-ligatures: contextual;
-  font-weight: 450;
-  -webkit-font-smoothing: subpixel-antialiased !important;
-  -moz-osx-font-smoothing: auto !important;
-  text-rendering: geometricPrecision !important;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
 }
 
 /* Sleek Ultra-Thin Minimal Scrollbar (4px) */
@@ -288,13 +288,13 @@ pre code {
   font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace !important;
   font-feature-settings: 'calt' 1, 'liga' 1;
   font-variant-ligatures: contextual;
-  font-weight: 450;
-  font-size: 13.5px !important;
-  line-height: 22px !important;
+  font-weight: 400;
+  font-size: 13px !important;
+  line-height: 21px !important;
   tab-size: 2;
-  -webkit-font-smoothing: subpixel-antialiased !important;
-  -moz-osx-font-smoothing: auto !important;
-  text-rendering: geometricPrecision !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
 }
 
 /* Comments: Soft Slate Blue / Charcoal Gray (italic) */
@@ -526,24 +526,37 @@ html.light .xterm-viewport {
   }
 }
 
-/* Ambient Outer Glow (Active when AI is working / streaming) */
+/* Ambient Soft Outer Halo (Sangat tipis dan rapi, tidak bocor menyala keluar) */
 .ambient-border-glow {
   position: absolute;
-  inset: -1.5px;
-  border-radius: 25.5px;
-  background: conic-gradient(
-    from var(--border-angle),
-    rgba(56, 189, 248, 0.55) 0deg,
-    rgba(45, 212, 191, 0.38) 20deg,
-    transparent 45deg,
-    transparent 315deg,
-    rgba(168, 85, 247, 0.38) 340deg,
-    rgba(56, 189, 248, 0.55) 360deg
-  );
-  animation: rotate-border-angle 7s linear infinite, ambient-breathe 4.5s ease-in-out infinite;
-  filter: blur(13px);
+  inset: 0px;
+  border-radius: 24px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.15), 0 0 20px rgba(168, 85, 247, 0.12);
   pointer-events: none;
   transition: opacity 0.4s ease;
+}
+
+/* Ambient Inset Inner Glow (Efek RGB soft meresap ke dalam dock saat AI berpikir/bekerja) */
+.ambient-inner-glow {
+  position: absolute;
+  inset: 0px;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+  background: conic-gradient(
+    from var(--border-angle),
+    rgba(56, 189, 248, 0.18) 0deg,
+    rgba(45, 212, 191, 0.14) 25deg,
+    rgba(244, 114, 182, 0.12) 60deg,
+    transparent 90deg,
+    transparent 270deg,
+    rgba(168, 85, 247, 0.14) 315deg,
+    rgba(56, 189, 248, 0.18) 360deg
+  );
+  mask-image: radial-gradient(ellipse at center, transparent 65%, black 100%);
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 65%, black 100%);
+  animation: rotate-border-angle 8s linear infinite, ambient-breathe 4s ease-in-out infinite;
 }
 
 /* Ambient Card Border (Active when AI is working / streaming) */

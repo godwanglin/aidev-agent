@@ -333,7 +333,7 @@ export const TaskOutputViewer: React.FC<TaskOutputViewerProps> = ({
           {/* Realtime Log Canvas with Line Numbers */}
           <div
             ref={scrollRef}
-            className="flex-1 overflow-auto px-4 pb-6 font-mono text-[13px] font-[450] leading-[22px] select-text subpixel-antialiased"
+            className="flex-1 overflow-auto px-4 pb-6 font-mono text-[13px] font-normal leading-[22px] select-text antialiased"
           >
             <div className="min-w-fit">
               {lines.map((line, idx) => {

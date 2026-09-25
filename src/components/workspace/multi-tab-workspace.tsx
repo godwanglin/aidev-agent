@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { WorkspaceHeader, WorkspaceMode } from './workspace-header';
+import { FileExplorerSidebar } from './file-explorer/file-explorer-sidebar';
 import {
   OverviewView,
   OverviewArtifactItem,
@@ -120,14 +121,55 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenMode, setQuickOpenMode] = useState<'files' | 'grep'>('files');
 
-  // Global Ctrl+P / Cmd+P listener for Quick Open palette (files)
-  // and Ctrl+Shift+F / Cmd+Shift+F for Grep Code palette
+  // File Explorer persistent state
+  const [isFileExplorerOpen, setIsFileExplorerOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('aidev:file-explorer-open');
+      return saved !== null ? saved === 'true' : true;
+    }
+    return true;
+  });
+  const [fileExplorerWidth, setFileExplorerWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('aidev:file-explorer-width');
+      const parsed = saved ? parseInt(saved, 10) : 230;
+      return !isNaN(parsed) && parsed >= 160 && parsed <= 480 ? parsed : 230;
+    }
+    return 230;
+  });
+  const [fetchedFiles, setFetchedFiles] = useState<string[]>([]);
+
+  const effectiveMode = activeModeProp !== undefined ? activeModeProp : internalMode;
+
+  // Toggle file explorer open / closed with persistence
+  const toggleFileExplorer = useCallback(() => {
+    setIsFileExplorerOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('aidev:file-explorer-open', String(next));
+      } catch {}
+      return next;
+    });
+    if (effectiveMode !== 'file') {
+      if (onSelectModeProp) {
+        onSelectModeProp('file');
+      } else {
+        setInternalMode('file');
+      }
+    }
+  }, [effectiveMode, onSelectModeProp]);
+
+  // Global Ctrl+P / Cmd+P listener for Quick Open palette (files),
+  // Ctrl+Shift+F for Grep Code palette, and Ctrl+Shift+E for File Explorer
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
         e.preventDefault();
         setQuickOpenMode('grep');
         setIsQuickOpenOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        e.preventDefault();
+        toggleFileExplorer();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         setQuickOpenMode('files');
@@ -152,9 +194,28 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
       window.removeEventListener('aidev:open-quick-open', handleOpenQuickOpen);
       window.removeEventListener('aidev:open-grep', handleOpenQuickGrep);
     };
-  }, []);
+  }, [toggleFileExplorer]);
 
-  const effectiveMode = activeModeProp !== undefined ? activeModeProp : internalMode;
+  // Refresh files list from /api/files/list
+  const handleRefreshFiles = useCallback(async () => {
+    if (!workdir) return;
+    try {
+      const res = await fetch(`/api/files/list?workdir=${encodeURIComponent(workdir)}`);
+      const data = await res.json();
+      if (Array.isArray(data.files)) {
+        setFetchedFiles(data.files);
+      }
+    } catch {}
+  }, [workdir]);
+
+  // Load files if workspaceFiles prop is empty on mount
+  useEffect(() => {
+    if ((!workspaceFiles || workspaceFiles.length === 0) && workdir) {
+      handleRefreshFiles();
+    }
+  }, [workspaceFiles, workdir, handleRefreshFiles]);
+
+  const effectiveFilesList = workspaceFiles && workspaceFiles.length > 0 ? workspaceFiles : fetchedFiles;
 
   // Filter file, task, browser, and terminal tabs
   const fileTabs = tabs.filter((t) => t.type === 'file' || t.type === 'diff' || t.type === 'task' || t.type === 'browser' || t.type === 'terminal');
@@ -257,6 +318,8 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
         activeFileTabId={activeFileTab?.id || null}
         fileTabs={fileTabs}
         isMaximized={isMaximized}
+        isFileExplorerOpen={isFileExplorerOpen}
+        onToggleFileExplorer={toggleFileExplorer}
         onSelectMode={handleSelectMode}
         onSelectFileTab={handleSelectFileTab}
         onCloseFileTab={onCloseTab}
@@ -338,108 +401,138 @@ export const MultiTabWorkspace: React.FC<MultiTabWorkspaceProps> = ({
         )}
 
         {effectiveMode === 'file' && (
-          activeFileTab ? (
-            activeFileTab.type === 'terminal' ? (
-              <TerminalView
-                terminals={terminals.length > 0 ? terminals : [{ id: activeFileTab.terminalId || 'default', workdir }]}
-                activeTerminalId={selectedTerminalId || activeFileTab.terminalId || (terminals[0]?.id ?? 'default')}
-                workdir={workdir}
-                onSelectTerminal={handleActivateTerminalSession}
-                onNewTerminal={onNewTerminalTab}
-                onDeleteTerminal={handleDeleteTerminal}
-              />
-            ) : activeFileTab.type === 'browser' ? (
-              <BrowserPreviewViewer
-                initialUrl={activeFileTab.url || ''}
-                tasks={tasks}
-                onUrlChange={(newUrl) => {
-                  activeFileTab.url = newUrl;
-                  onBrowserMetadataChange?.(activeFileTab.id, {
-                    title: activeFileTab.title,
-                    favicon: activeFileTab.favicon || null,
-                    url: newUrl,
-                  });
-                }}
-                onMetadataChange={(meta) => {
-                  onBrowserMetadataChange?.(activeFileTab.id, meta);
-                }}
-              />
-            ) : activeFileTab.type === 'task' ? (
-              <TaskOutputViewer
-                taskId={activeFileTab.taskId || activeFileTab.id}
-                cmd={activeFileTab.taskCmd || activeFileTab.title}
-                tasks={tasks}
-                onSelectTask={onOpenTask}
-                onOpenBrowser={onOpenBrowserTab}
-                onStop={onStopTask || onStopAllTasks}
-                onRestartTask={onRestartTask}
-                onDeleteTask={onDeleteTask}
-                onClearTasks={onClearTasks}
-                onStopAllTasks={onStopAllTasks}
-                onOpenOverview={() => handleSelectMode('overview')}
-              />
-            ) : activeFileTab.type === 'diff' ? (
-              <DiffViewer
-                mode="stacked"
-                filePath={activeFileTab.filePath || 'Unknown'}
-                originalContent={activeFileTab.originalContent || ''}
-                currentContent={activeFileTab.currentContent || ''}
-                snapshotId={activeFileTab.snapshotId}
-                onRevert={
-                  onRevertFile && activeFileTab.snapshotId && activeFileTab.filePath
-                    ? (sid) => onRevertFile(sid, activeFileTab.filePath!)
-                    : undefined
-                }
-                showBreadcrumbs={true}
-                workdir={workdir}
-                onOpenReview={() => handleSelectMode('review')}
-              />
-            ) : (
-              <FileViewer
-                filePath={activeFileTab.filePath || 'Unknown'}
-                content={activeFileTab.currentContent || ''}
-                highlightRange={activeFileTab.highlightRange}
-                onSendMessage={onSendMessage}
-                onOpenFile={onOpenFile}
-              />
-            )
-          ) : (
-            <OverviewView
-              subagents={subagents}
+          <div className="flex-1 min-h-0 flex h-full overflow-hidden bg-[#101010]">
+            {/* File Explorer Sidebar (Collapsible & Resizable) */}
+            <FileExplorerSidebar
+              workdir={workdir}
+              projectName={projectName}
+              files={effectiveFilesList}
+              activeFilePath={activeFileTab?.filePath}
               changedFiles={changedFiles}
-              terminalsCount={terminals.length}
-              terminals={terminals}
-              artifacts={artifacts}
-              uploads={uploads}
-              tasks={tasks}
-              skills={skills}
-              onOpenArtifact={handleOpenArtifactOrFile}
-              onOpenUpload={handleOpenUpload}
-              onOpenSkill={handleOpenSkill}
-              onOpenTask={handleOpenTask}
-              onStopTask={onStopTask}
-              onRestartTask={onRestartTask}
-              onDeleteTask={onDeleteTask}
-              onClearTasks={onClearTasks}
-              onStopAllTasks={onStopAllTasks}
-              onDeleteTerminal={handleDeleteTerminal}
-              onDeleteAllTerminals={handleDeleteAllTerminals}
-              onSwitchToReview={() => handleSelectMode('review')}
-              onSwitchToTerminal={(termId) => {
-                if (termId) {
-                  handleActivateTerminalSession(termId);
-                } else {
-                  handleSelectMode('terminal');
-                }
+              isOpen={isFileExplorerOpen}
+              width={fileExplorerWidth}
+              onToggleOpen={() => {
+                setIsFileExplorerOpen(false);
+                try {
+                  localStorage.setItem('aidev:file-explorer-open', 'false');
+                } catch {}
               }}
-              onSelectTerminal={(termId) => {
-                handleActivateTerminalSession(termId);
+              onWidthChange={(newWidth) => {
+                setFileExplorerWidth(newWidth);
+                try {
+                  localStorage.setItem('aidev:file-explorer-width', String(newWidth));
+                } catch {}
               }}
-              onNewTerminal={onNewTerminalTab}
-              onOpenFile={handleOpenArtifactOrFile}
-              onOpenFileDiff={onOpenFileDiff}
+              onOpenFile={(path) => handleOpenArtifactOrFile(path)}
+              onRefresh={handleRefreshFiles}
             />
-          )
+
+            {/* Right Pane: Active File Editor / Viewer */}
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-hidden bg-[#101010]">
+              {activeFileTab ? (
+                activeFileTab.type === 'terminal' ? (
+                  <TerminalView
+                    terminals={terminals.length > 0 ? terminals : [{ id: activeFileTab.terminalId || 'default', workdir }]}
+                    activeTerminalId={selectedTerminalId || activeFileTab.terminalId || (terminals[0]?.id ?? 'default')}
+                    workdir={workdir}
+                    onSelectTerminal={handleActivateTerminalSession}
+                    onNewTerminal={onNewTerminalTab}
+                    onDeleteTerminal={handleDeleteTerminal}
+                  />
+                ) : activeFileTab.type === 'browser' ? (
+                  <BrowserPreviewViewer
+                    initialUrl={activeFileTab.url || ''}
+                    tasks={tasks}
+                    onUrlChange={(newUrl) => {
+                      activeFileTab.url = newUrl;
+                      onBrowserMetadataChange?.(activeFileTab.id, {
+                        title: activeFileTab.title,
+                        favicon: activeFileTab.favicon || null,
+                        url: newUrl,
+                      });
+                    }}
+                    onMetadataChange={(meta) => {
+                      onBrowserMetadataChange?.(activeFileTab.id, meta);
+                    }}
+                  />
+                ) : activeFileTab.type === 'task' ? (
+                  <TaskOutputViewer
+                    taskId={activeFileTab.taskId || activeFileTab.id}
+                    cmd={activeFileTab.taskCmd || activeFileTab.title}
+                    tasks={tasks}
+                    onSelectTask={onOpenTask}
+                    onOpenBrowser={onOpenBrowserTab}
+                    onStop={onStopTask || onStopAllTasks}
+                    onRestartTask={onRestartTask}
+                    onDeleteTask={onDeleteTask}
+                    onClearTasks={onClearTasks}
+                    onStopAllTasks={onStopAllTasks}
+                    onOpenOverview={() => handleSelectMode('overview')}
+                  />
+                ) : activeFileTab.type === 'diff' ? (
+                  <DiffViewer
+                    mode="stacked"
+                    filePath={activeFileTab.filePath || 'Unknown'}
+                    originalContent={activeFileTab.originalContent || ''}
+                    currentContent={activeFileTab.currentContent || ''}
+                    snapshotId={activeFileTab.snapshotId}
+                    onRevert={
+                      onRevertFile && activeFileTab.snapshotId && activeFileTab.filePath
+                        ? (sid) => onRevertFile(sid, activeFileTab.filePath!)
+                        : undefined
+                    }
+                    showBreadcrumbs={true}
+                    workdir={workdir}
+                    onOpenReview={() => handleSelectMode('review')}
+                  />
+                ) : (
+                  <FileViewer
+                    filePath={activeFileTab.filePath || 'Unknown'}
+                    content={activeFileTab.currentContent || ''}
+                    highlightRange={activeFileTab.highlightRange}
+                    onSendMessage={onSendMessage}
+                    onOpenFile={onOpenFile}
+                  />
+                )
+              ) : (
+                <OverviewView
+                  subagents={subagents}
+                  changedFiles={changedFiles}
+                  terminalsCount={terminals.length}
+                  terminals={terminals}
+                  artifacts={artifacts}
+                  uploads={uploads}
+                  tasks={tasks}
+                  skills={skills}
+                  onOpenArtifact={handleOpenArtifactOrFile}
+                  onOpenUpload={handleOpenUpload}
+                  onOpenSkill={handleOpenSkill}
+                  onOpenTask={handleOpenTask}
+                  onStopTask={onStopTask}
+                  onRestartTask={onRestartTask}
+                  onDeleteTask={onDeleteTask}
+                  onClearTasks={onClearTasks}
+                  onStopAllTasks={onStopAllTasks}
+                  onDeleteTerminal={handleDeleteTerminal}
+                  onDeleteAllTerminals={handleDeleteAllTerminals}
+                  onSwitchToReview={() => handleSelectMode('review')}
+                  onSwitchToTerminal={(termId) => {
+                    if (termId) {
+                      handleActivateTerminalSession(termId);
+                    } else {
+                      handleSelectMode('terminal');
+                    }
+                  }}
+                  onSelectTerminal={(termId) => {
+                    handleActivateTerminalSession(termId);
+                  }}
+                  onNewTerminal={onNewTerminalTab}
+                  onOpenFile={handleOpenArtifactOrFile}
+                  onOpenFileDiff={onOpenFileDiff}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
 

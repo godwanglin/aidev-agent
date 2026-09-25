@@ -76,3 +76,60 @@ export function formatModelDisplayName(id: string, customName?: string): string 
 
   return isFree ? `${formatted} (Free)` : formatted;
 }
+
+export interface BasicModelInfo {
+  id: string;
+  name?: string;
+  eligible?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Resolves the best eligible model based on user preference and eligibility:
+ * 1. If preferredModelId is explicitly eligible, keeps user preference.
+ * 2. If preferredModelId is locked/ineligible (or not specified):
+ *    a. Prefers eligible Gemini models.
+ *    b. Prefers eligible Free/Lite models.
+ *    c. Picks the first eligible model.
+ *    d. Safe fallback if no eligible models are marked.
+ */
+export function resolveEligibleModel<T extends BasicModelInfo>(
+  models: T[] = [],
+  preferredModelId?: string,
+  fallback = 'gemini-3.8-flash-high'
+): string {
+  if (!models || models.length === 0) {
+    return preferredModelId || fallback;
+  }
+
+  // 1. If preferredModelId is present and eligible, keep it
+  if (preferredModelId) {
+    const preferred = models.find((m) => m.id === preferredModelId);
+    if (preferred && preferred.eligible !== false) {
+      return preferred.id;
+    }
+  }
+
+  // Filter models that are eligible
+  const eligibleModels = models.filter((m) => m.eligible !== false);
+  if (eligibleModels.length === 0) {
+    return preferredModelId || models[0]?.id || fallback;
+  }
+
+  // 2a. Priority: Eligible Gemini model
+  const eligibleGemini = eligibleModels.find((m) => m.id.toLowerCase().includes('gemini'));
+  if (eligibleGemini) {
+    return eligibleGemini.id;
+  }
+
+  // 2b. Priority: Eligible Free / Lite model
+  const eligibleFree = eligibleModels.find(
+    (m) => m.id.toLowerCase().includes('free') || m.id.toLowerCase().includes('lite')
+  );
+  if (eligibleFree) {
+    return eligibleFree.id;
+  }
+
+  // 2c. First eligible model in the list
+  return eligibleModels[0].id;
+}

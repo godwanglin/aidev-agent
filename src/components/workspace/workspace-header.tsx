@@ -14,6 +14,7 @@ import {
   Globe,
   SquareTerminal,
   X,
+  Folder,
 } from 'lucide-react';
 import type { WorkspaceTab } from './multi-tab-workspace';
 import { AestheticFileIcon } from '@/components/common/aesthetic-file-icon';
@@ -26,6 +27,8 @@ interface WorkspaceHeaderProps {
   activeFileTabId: string | null;
   fileTabs: WorkspaceTab[];
   isMaximized: boolean;
+  isFileExplorerOpen?: boolean;
+  onToggleFileExplorer?: () => void;
   onSelectMode: (mode: WorkspaceMode) => void;
   onSelectFileTab: (tabId: string) => void;
   onCloseFileTab: (tabId: string) => void;
@@ -41,6 +44,8 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
   activeFileTabId,
   fileTabs,
   isMaximized,
+  isFileExplorerOpen = false,
+  onToggleFileExplorer,
   onSelectMode,
   onSelectFileTab,
   onCloseFileTab,
@@ -128,6 +133,22 @@ const TabFavicon: React.FC<{ favicon?: string | null }> = ({ favicon }) => {
     <div className="h-9 sm:h-10 border-b border-[#191919] bg-[#151515] px-1.5 sm:px-2 flex items-center justify-between shrink-0 select-none relative z-30">
       {/* 1. Pinned 3 Main Antigravity View Mode Icons (NEVER shrink) */}
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 flex-none mr-1 sm:mr-1.5">
+        {/* Explorer Toggle / File Tree Button */}
+        {onToggleFileExplorer && (
+          <button
+            type="button"
+            onClick={onToggleFileExplorer}
+            className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center transition-all ${
+              isFileExplorerOpen && activeMode === 'file'
+                ? 'bg-[#1f1f1f] text-sky-400 border border-sky-500/30 shadow-sm'
+                : 'text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#1f1f1f]/50'
+            }`}
+            title="File Explorer (Ctrl+Shift+E)"
+          >
+            <Folder className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+          </button>
+        )}
+
         {/* Overview Mode Button */}
         <button
           type="button"

@@ -40,6 +40,8 @@ import {
 } from 'lucide-react';
 import { AestheticFileIcon } from '@/components/common/aesthetic-file-icon';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { isBinaryExtension } from '@/lib/binary-detector';
+import { BinaryFilePlaceholder } from './binary-file-placeholder';
 
 const MarkdownCodeBlock: React.FC<{
   language?: string;
@@ -376,7 +378,7 @@ interface FileViewerProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-const DEFAULT_FONT_SIZE = 12;
+const DEFAULT_FONT_SIZE = 13;
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 26;
 
@@ -591,11 +593,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   }, [filePath]);
 
   // Split content into lines
-  const lines = useMemo(() => {
-    if (!content) return [''];
-    return content.split('\n');
-  }, [content]);
-
   // Detect if this is an image file
   const isImage = useMemo(() => {
     const clean = filePath.split('?')[0].toLowerCase();
@@ -609,6 +606,21 @@ export const FileViewer: React.FC<FileViewerProps> = ({
       filePath.startsWith('/api/media')
     );
   }, [filePath]);
+
+  // Detect if this is a binary file (exe, dll, bin, zip, etc.)
+  const isBinary = useMemo(() => {
+    if (isImage) return false;
+    if (isBinaryExtension(filePath)) return true;
+    if (content === '__AIDEV_BINARY_FILE__') return true;
+    if (content && typeof content === 'string' && content.slice(0, 512).includes('\0')) return true;
+    return false;
+  }, [filePath, isImage, content]);
+
+  const lines = useMemo(() => {
+    if (isImage || isBinary) return [];
+    if (!content) return [''];
+    return content.split('\n');
+  }, [content, isImage, isBinary]);
 
   // Detect if this is a Markdown file
   const isMarkdown = useMemo(() => {
@@ -630,7 +642,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
   // Pre-tokenize and highlight lines for fast 60fps rendering
   const highlightedLines = useMemo(() => {
-    if (isImage) return [];
+    if (isImage || isBinary) return [];
     const grammar = Prism.languages[lang] || Prism.languages.javascript;
     return lines.map((line) => {
       try {
@@ -639,7 +651,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
         return line || ' ';
       }
     });
-  }, [lines, lang, isImage]);
+  }, [lines, lang, isImage, isBinary]);
 
   // Auto-scroll to highlightRange when mounted or changed
   useEffect(() => {
@@ -1147,7 +1159,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
         </div>
       </div>
 
-      {/* 2. Image Canvas, Markdown Preview, or Read-Only Code Canvas */}
+      {/* 2. Image Canvas, Binary Placeholder, Markdown Preview, or Read-Only Code Canvas */}
       {isImage ? (
         <div className="flex-1 overflow-auto bg-[#0f0f0f] flex flex-col items-center justify-center p-6 select-none relative">
           <div className="max-w-full max-h-[75vh] flex flex-col items-center justify-center p-2 rounded-xl bg-[#141414] border border-[#222222] shadow-2xl">
@@ -1167,6 +1179,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({
             </div>
           </div>
         </div>
+      ) : isBinary ? (
+        <BinaryFilePlaceholder filePath={filePath} />
       ) : isMarkdown && mdMode === 'preview' ? (
         <MarkdownPreview content={content} filePath={filePath} />
       ) : (
@@ -1217,10 +1231,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                       : 'hover:bg-[#1a1c20]'
                   }`}
                 >
-                  {/* Gutter Column: Line Number + Fold Chevron + Hover Blue '+' Button */}
+                  {/* Gutter Column: Line Number + Fold Chevron + Hover Blue '+' Button (Sticky Left) */}
                   <div
                     style={{ lineHeight: `${lineHeight}px` }}
-                    className="w-14 shrink-0 flex items-center justify-between px-2.5 text-[#4d5158] select-none text-[11px] font-mono border-r border-[#1e2024]/60"
+                    className={`w-14 shrink-0 sticky left-0 z-10 flex items-center justify-between px-2.5 select-none text-[11px] font-mono border-r border-[#1e2024]/80 transition-colors ${
+                      isHighlighted
+                        ? 'bg-[#1a2332] text-sky-400'
+                        : 'bg-[#121315] text-[#4d5158] group-hover/line:bg-[#1a1c20]'
+                    }`}
                   >
                     {/* Line Number */}
                     <span
@@ -1255,7 +1273,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                       fontSize: `${fontSize}px`,
                       lineHeight: `${lineHeight}px`,
                     }}
-                    className={`flex-1 pl-3.5 pr-4 font-mono font-[450] select-text min-w-0 subpixel-antialiased ${
+                    className={`flex-1 pl-3.5 pr-4 font-mono font-normal select-text min-w-0 antialiased ${
                       wordWrap
                         ? 'whitespace-pre-wrap break-all [overflow-wrap:anywhere]'
                         : 'whitespace-pre overflow-x-visible'
@@ -1272,25 +1290,25 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
                 {/* 3. Inline Comment Widget (Appears underneath this line when '+' clicked) */}
                 {isCommentOpen && (
-                  <div className="my-2 mx-6 p-3 rounded-xl bg-[#181818] border border-[#2a2a2a] shadow-2xl space-y-2.5 animate-dropdown select-none">
+                  <div className="my-1.5 ml-10 mr-auto max-w-[440px] w-[calc(100%-48px)] min-w-[260px] p-2.5 rounded-xl bg-[#15161a] border border-[#282a32] shadow-xl space-y-2 animate-dropdown select-none sticky left-14 z-10">
                     {/* Header */}
-                    <div className="flex items-center justify-between text-xs pb-1.5 border-b border-[#262626]">
-                      <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10.5px] font-medium border border-[#007acc]/30">
-                          <MessageSquare className="w-3 h-3" />
+                    <div className="flex items-center justify-between text-xs pb-1 border-b border-[#23252d]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#007acc]/20 text-[#58a6ff] font-sans text-[10px] font-medium border border-[#007acc]/30 shrink-0">
+                          <MessageSquare className="w-2.5 h-2.5" />
                           Line {lineNum}
                         </span>
-                        <span className="text-[#8c8c8c] text-[11px] font-mono truncate max-w-[320px]">
+                        <span className="text-[#8c8c8c] text-[10.5px] font-mono truncate max-w-[200px]">
                           {line.trim() || '(empty line)'}
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => cancelComment(lineNum)}
-                        className="p-1 rounded text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer"
-                        title="Cancel comment"
+                        className="w-5 h-5 rounded flex items-center justify-center text-[#6e6e6e] hover:text-[#cccccc] hover:bg-[#222222] transition cursor-pointer shrink-0"
+                        title="Cancel"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
 
@@ -1311,14 +1329,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                           cancelComment(lineNum);
                         }
                       }}
-                      placeholder="Ask AI about this line or give instructions... (Ctrl+Enter to send)"
-                      rows={2}
-                      className="w-full bg-[#121212] border border-[#262626] rounded-lg p-2.5 text-[12px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-relaxed select-text"
+                      placeholder="Ask AI about this line... (Ctrl+Enter)"
+                      rows={1}
+                      className="w-full bg-[#101114] border border-[#23252d] rounded-lg p-2 text-[11.5px] text-[#cccccc] placeholder-[#666666] focus:outline-none focus:border-[#007acc] resize-none font-sans leading-normal select-text min-h-[32px] max-h-[80px]"
                     />
 
-                    {/* Quick suggestion chips */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] pb-0.5">
-                      {['Explain this code', 'Refactor this logic', 'Check for bugs', 'Add unit test'].map(
+                    {/* Quick suggestion chips (compact & wrapping) */}
+                    <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                      {['Explain', 'Refactor', 'Check bugs', 'Add test'].map(
                         (chip) => (
                           <button
                             key={chip}
@@ -1330,7 +1348,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                                 [lineNum]: cur ? `${cur} ${chip}` : chip,
                               });
                             }}
-                            className="px-2 py-0.5 rounded-md bg-[#202020] hover:bg-[#262626] text-[#9d9d9d] hover:text-[#cccccc] border border-[#282828] whitespace-nowrap transition cursor-pointer text-[10.5px]"
+                            className="px-1.5 py-0.5 rounded bg-[#1c1d22] hover:bg-[#25272e] text-[#9d9d9d] hover:text-[#cccccc] border border-[#2a2c35] transition cursor-pointer text-[10px]"
                           >
                             {chip}
                           </button>
@@ -1339,11 +1357,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                     </div>
 
                     {/* Action Buttons: Cancel or Send to AI */}
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center justify-between pt-0.5">
                       <button
                         type="button"
                         onClick={() => cancelComment(lineNum)}
-                        className="px-2.5 py-1 text-xs text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded-md transition cursor-pointer"
+                        className="px-2 py-0.5 text-[11px] text-[#8c8c8c] hover:text-[#cccccc] hover:bg-[#222222] rounded transition cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -1352,14 +1370,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                         type="button"
                         onClick={() => handleSendComment(lineNum)}
                         disabled={!commentTexts[lineNum]?.trim()}
-                        className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition shadow-sm ${
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition shadow-sm ${
                           commentTexts[lineNum]?.trim()
                             ? 'bg-[#007acc] hover:bg-[#0086e6] text-white cursor-pointer active:scale-95'
-                            : 'bg-[#222222] text-[#666666] cursor-not-allowed'
+                            : 'bg-[#1f2025] text-[#555555] cursor-not-allowed'
                         }`}
-                        title="Add snippet and comment as context chip in chat input"
+                        title="Add to Chat (Ctrl+Enter)"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-3 h-3" />
                         <span>Add to Chat</span>
                       </button>
                     </div>

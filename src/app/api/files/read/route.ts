@@ -5,6 +5,55 @@ import path from 'path';
 import { sanitizeAndResolvePath } from '@/lib/security';
 import { sessionRepo, projectRepo } from '@/lib/db';
 import { getChatStorage } from '@/lib/storage';
+import { isBinaryExtension, isBinaryBuffer } from '@/lib/binary-detector';
+
+function serveFileSafely(absPath: string, relativePath: string) {
+  const stat = fs.statSync(absPath);
+  if (stat.isDirectory()) {
+    return NextResponse.json({ error: 'Path is a directory' }, { status: 400 });
+  }
+
+  // 1. Check known binary extensions
+  if (isBinaryExtension(absPath)) {
+    return NextResponse.json({
+      path: relativePath,
+      content: '__AIDEV_BINARY_FILE__',
+      isBinary: true,
+      size: stat.size,
+    });
+  }
+
+  // 2. Reject files larger than 10MB to avoid freezing UI
+  if (stat.size > 10 * 1024 * 1024) {
+    return NextResponse.json({
+      path: relativePath,
+      content: '__AIDEV_BINARY_FILE__',
+      isBinary: true,
+      isTooLarge: true,
+      size: stat.size,
+    });
+  }
+
+  // 3. Inspect first 1024 bytes for null bytes
+  if (stat.size > 0) {
+    const fd = fs.openSync(absPath, 'r');
+    const buffer = Buffer.alloc(Math.min(stat.size, 1024));
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+    fs.closeSync(fd);
+
+    if (isBinaryBuffer(buffer)) {
+      return NextResponse.json({
+        path: relativePath,
+        content: '__AIDEV_BINARY_FILE__',
+        isBinary: true,
+        size: stat.size,
+      });
+    }
+  }
+
+  const content = fs.readFileSync(absPath, 'utf-8');
+  return NextResponse.json({ path: relativePath, content, size: stat.size });
+}
 
 export async function GET(req: Request) {
   try {
@@ -42,11 +91,7 @@ export async function GET(req: Request) {
       for (const aPath of candidateArtifactPaths) {
         if (fs.existsSync(aPath)) {
           try {
-            const stat = fs.statSync(aPath);
-            if (stat.isFile()) {
-              const content = fs.readFileSync(aPath, 'utf-8');
-              return NextResponse.json({ path: relativePath, content, size: stat.size });
-            }
+            return serveFileSafely(aPath, relativePath);
           } catch {}
         }
       }
@@ -75,11 +120,7 @@ export async function GET(req: Request) {
             }
 
             if (!existsInWorkspace) {
-              const stat = fs.statSync(directArtifactPath);
-              if (stat.isFile()) {
-                const content = fs.readFileSync(directArtifactPath, 'utf-8');
-                return NextResponse.json({ path: relativePath, content, size: stat.size });
-              }
+              return serveFileSafely(directArtifactPath, relativePath);
             }
           }
         }
@@ -90,11 +131,7 @@ export async function GET(req: Request) {
     const directAbsPath = path.resolve(relativePath.replace(/^file:\/\/\/?/i, ''));
     if (fs.existsSync(directAbsPath)) {
       try {
-        const stat = fs.statSync(directAbsPath);
-        if (stat.isFile()) {
-          const content = fs.readFileSync(directAbsPath, 'utf-8');
-          return NextResponse.json({ path: relativePath, content, size: stat.size });
-        }
+        return serveFileSafely(directAbsPath, relativePath);
       } catch {}
     }
 
@@ -131,13 +168,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'File does not exist' }, { status: 404 });
     }
 
-    const stat = fs.statSync(resolved);
-    if (stat.isDirectory()) {
-      return NextResponse.json({ error: 'Path is a directory' }, { status: 400 });
-    }
-
-    const content = fs.readFileSync(resolved, 'utf-8');
-    return NextResponse.json({ path: relativePath, content, size: stat.size });
+    return serveFileSafely(resolved, relativePath);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

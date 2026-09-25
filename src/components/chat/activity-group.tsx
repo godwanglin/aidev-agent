@@ -23,6 +23,7 @@ export interface ActivityGroupProps {
   onOpenFileDiff?: (filePath: string) => void;
   onOpenFile?: (filePath: string, lineRange?: { startLine?: number; endLine?: number }) => void;
   onOpenBrowser?: (url: string) => void;
+  workdir?: string;
   verbose?: boolean;
   latestUpdateTodosId?: string | null;
 }
@@ -135,6 +136,7 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
   onOpenFileDiff,
   onOpenFile,
   onOpenBrowser,
+  workdir,
   verbose = true,
   latestUpdateTodosId,
 }) => {
@@ -282,6 +284,7 @@ export const ActivityGroup: React.FC<ActivityGroupProps> = ({
                   argumentsText={step.toolMessage.tool_arguments || undefined}
                   resultText={step.toolMessage.tool_result || step.toolMessage.content || undefined}
                   status={(step.toolMessage.status as any) || 'COMPLETED'}
+                  workdir={workdir}
                   onOpenFileDiff={onOpenFileDiff}
                   onOpenFile={onOpenFile}
                   onOpenBrowser={onOpenBrowser}

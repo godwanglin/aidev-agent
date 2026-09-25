@@ -29,6 +29,7 @@ import { getProjectSlug, findProjectBySlug } from '@/lib/project-utils';
 import { useConfirm } from '@/context/confirm-context';
 import type { AttachedImage } from '@/components/chat/chat-input';
 import { playNotificationChime } from '@/lib/audio';
+import { resolveEligibleModel } from '@/lib/model-utils';
 
 function getSavedSessionWorkspace(sessionId?: string) {
   if (typeof window === 'undefined' || !sessionId) return null;
@@ -91,6 +92,15 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     window.addEventListener('aidev:config-updated', handleConfigUpdated);
     return () => window.removeEventListener('aidev:config-updated', handleConfigUpdated);
   }, []);
+
+  // Auto-switch to an eligible model if current selectedModel becomes locked/ineligible
+  useEffect(() => {
+    if (models.length > 0) {
+      setSelectedModel((current) =>
+        resolveEligibleModel(models, current, settings?.defaultModel || 'gemini-3.8-flash-high')
+      );
+    }
+  }, [models, settings?.defaultModel]);
 
   // Projects & Sessions
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -520,13 +530,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         fetch('/api/models')
           .then((r) => r.json())
           .then((d) => {
-            if (d.models) setModels(d.models);
+            if (d.models && Array.isArray(d.models)) {
+              setModels(d.models);
+              setSelectedModel((current) =>
+                resolveEligibleModel(d.models, current, cfgData?.settings?.defaultModel)
+              );
+            }
           })
           .catch(console.error);
 
         if (cfgData.settings) {
           setSettings(cfgData.settings);
-          setSelectedModel(cfgData.settings.defaultModel || 'gemini-3.8-flash-high');
+          setSelectedModel((current) =>
+            resolveEligibleModel(models, cfgData.settings.defaultModel || current)
+          );
           setPermissionMode(cfgData.settings.permissionMode || 'AUTO');
         }
         setIsConfigLoaded(true);
@@ -570,7 +587,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
         if (targetSess) {
           setCurrentSession(targetSess);
-          if (targetSess.model_id) setSelectedModel(targetSess.model_id);
+          if (targetSess.model_id) setSelectedModel((current) => resolveEligibleModel(models, targetSess!.model_id || current));
           if (targetSess.permission_mode) setPermissionMode(targetSess.permission_mode);
           // Clear unread if opening
           if (targetSess.is_unread) {
@@ -591,7 +608,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
               id: `draft_${Date.now()}`,
               project_id: targetProj?.id || 'no_project',
               title: 'New Conversation',
-              model_id: 'gemini-3.8-flash-high',
+              model_id: resolveEligibleModel(models, settings?.defaultModel || 'gemini-3.8-flash-high'),
               permission_mode: permissionMode || 'AUTO',
               is_unread: 0,
               created_at: Date.now(),
@@ -1216,6 +1233,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       const data = await res.json();
       if (data.models && Array.isArray(data.models)) {
         setModels(data.models);
+        setSelectedModel((curr) => resolveEligibleModel(data.models, curr));
       }
     } catch (err) {
       console.error('Failed to refresh models:', err);
@@ -1237,7 +1255,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     currentProjectRef.current = targetProj;
     setCurrentProject(targetProj);
     setCurrentSession(session);
-    if (session.model_id) setSelectedModel(session.model_id);
+    if (session.model_id) setSelectedModel((curr) => resolveEligibleModel(models, session.model_id || curr));
     if (session.permission_mode) setPermissionMode(session.permission_mode);
 
     // Clear unread
@@ -3943,12 +3961,12 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       <ApiKeyLoginPage
         onLoginSuccess={(updatedSettings, updatedModels) => {
           setSettings(updatedSettings);
-          if (updatedSettings.defaultModel) {
-            setSelectedModel(updatedSettings.defaultModel);
-          }
+          const modelsList = Array.isArray(updatedModels) && updatedModels.length > 0 ? updatedModels : models;
           if (Array.isArray(updatedModels) && updatedModels.length > 0) {
             setModels(updatedModels);
           }
+          const bestModel = resolveEligibleModel(modelsList, updatedSettings.defaultModel);
+          setSelectedModel(bestModel);
         }}
       />
     );

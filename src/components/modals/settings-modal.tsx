@@ -28,6 +28,7 @@ import type { AidevSettings } from '@/lib/storage';
 import type { ProjectRecord } from '@/lib/db';
 import type { GatewayModel } from '@/lib/gateway';
 import { playNotificationChime } from '@/lib/audio';
+import { resolveEligibleModel } from '@/lib/model-utils';
 import { useTheme, LIGHT_PRESETS, DARK_PRESETS } from '@/context/theme-context';
 import { PermissionsRulesModal, LocalPermissionsState, PermissionRuleCategory } from './permissions-rules-modal';
 import { DirectoryPickerModal } from './directory-picker-modal';
@@ -1382,28 +1383,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           setDynamicModels(freshModels);
           onModelsRefreshed?.(freshModels);
 
-          // Check if current defaultModel exists in new provider's models
-          const modelExists = freshModels.some((m: any) => m.id === defaultModel);
-          if (!modelExists) {
-            // Find a sensible default model (e.g. gpt-4o, gpt-4o-mini, or first available)
-            const fallbackModel =
-              freshModels.find((m: any) =>
-                m.id === 'gpt-4o' ||
-                m.id === 'gpt-4o-mini' ||
-                m.id.includes('deepseek-chat') ||
-                m.id.includes('claude-3-5-sonnet') ||
-                m.id.includes('chat')
-              ) || freshModels[0];
-
-            if (fallbackModel) {
-              setDefaultModel(fallbackModel.id);
-              updatedPayload.defaultModel = fallbackModel.id;
-              await fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ defaultModel: fallbackModel.id }),
-              });
-            }
+          // Verify and resolve eligible model for defaultModel
+          const bestModel = resolveEligibleModel(freshModels, defaultModel);
+          if (bestModel !== defaultModel) {
+            setDefaultModel(bestModel);
+            updatedPayload.defaultModel = bestModel;
+            await fetch('/api/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ defaultModel: bestModel }),
+            });
           }
         }
       } catch (err) {

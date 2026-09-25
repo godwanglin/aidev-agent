@@ -413,48 +413,109 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     return result;
   }, [messages]);
 
-  // Cleanly map each compaction chronologically to the turn preceding its execution
-  const compactionByTurnIndex = useMemo(() => {
-    if (!compactions || compactions.length === 0 || turns.length === 0) {
-      return new Map<number, SessionCompactionRecord>();
+  // Cleanly map each compaction chronologically to the exact turn marking its boundary
+  const { compactionsByTurnIndex, topCompactions } = useMemo(() => {
+    const byTurn = new Map<number, SessionCompactionRecord[]>();
+    const top: SessionCompactionRecord[] = [];
+
+    if (!compactions || compactions.length === 0) {
+      return { compactionsByTurnIndex: byTurn, topCompactions: top };
     }
-    const map = new Map<number, SessionCompactionRecord>();
 
-    const getTurnTimestamp = (t: ConversationTurn): number => {
-      let maxTs = t.userMessage?.created_at || 0;
-      if (t.assistantMessage?.created_at && t.assistantMessage.created_at > maxTs) {
-        maxTs = t.assistantMessage.created_at;
-      }
-      for (const seg of t.segments) {
-        if (seg.message?.created_at && seg.message.created_at > maxTs) {
-          maxTs = seg.message.created_at;
-        }
-      }
-      for (const step of t.steps) {
-        if (step.toolMessage?.created_at && step.toolMessage.created_at > maxTs) {
-          maxTs = step.toolMessage.created_at;
-        }
-      }
-      return maxTs;
-    };
-
-    const turnTimes = turns.map((t, idx) => ({ idx, time: getTurnTimestamp(t) }));
+    if (turns.length === 0) {
+      return { compactionsByTurnIndex: byTurn, topCompactions: compactions };
+    }
 
     for (const comp of compactions) {
-      let targetTurnIdx = -1;
-      for (let i = turnTimes.length - 1; i >= 0; i--) {
-        if (turnTimes[i].time <= comp.created_at + 1000) {
-          targetTurnIdx = turnTimes[i].idx;
-          break;
+      let matchedTurnIdx = -1;
+
+      // 1. Direct match: check if any turn contains comp.last_compacted_message_id
+      if (comp.last_compacted_message_id) {
+        for (let i = 0; i < turns.length; i++) {
+          const t = turns[i];
+          const hasMsg =
+            t.userMessage?.id === comp.last_compacted_message_id ||
+            t.assistantMessage?.id === comp.last_compacted_message_id ||
+            t.segments.some(
+              (s) =>
+                s.message?.id === comp.last_compacted_message_id ||
+                s.introMessage?.id === comp.last_compacted_message_id ||
+                s.steps?.some((st) => st.toolMessage?.id === comp.last_compacted_message_id)
+            ) ||
+            t.steps.some((st) => st.toolMessage?.id === comp.last_compacted_message_id);
+
+          if (hasMsg) {
+            matchedTurnIdx = i;
+            break;
+          }
         }
       }
-      if (targetTurnIdx === -1) {
-        targetTurnIdx = Math.max(0, turns.length - 1);
+
+      // 2. Positional match via full messages array
+      if (matchedTurnIdx === -1 && comp.last_compacted_message_id && messages.length > 0) {
+        const lastMsgIdx = messages.findIndex((m) => m.id === comp.last_compacted_message_id);
+        if (lastMsgIdx !== -1) {
+          // Find which turn contains messages[lastMsgIdx] by checking user message boundaries
+          for (let i = turns.length - 1; i >= 0; i--) {
+            const uMsg = turns[i].userMessage;
+            if (uMsg) {
+              const uIdx = messages.findIndex((m) => m.id === uMsg.id);
+              if (uIdx !== -1 && uIdx <= lastMsgIdx) {
+                matchedTurnIdx = i;
+                break;
+              }
+            }
+          }
+        }
       }
-      map.set(targetTurnIdx, comp);
+
+      // 3. Fallback: if not matched and compaction was created before or at our earliest loaded message
+      const earliestMessageTs = messages[0]?.created_at || 0;
+      if (matchedTurnIdx === -1) {
+        if (comp.created_at <= earliestMessageTs) {
+          top.push(comp);
+          continue;
+        }
+
+        // If compaction is newer than earliest loaded message but couldn't be matched by ID,
+        // find the turn before the turn that was active around comp.created_at
+        // Compaction was triggered at the start of a turn, compacting history before it.
+        let triggerTurnIdx = -1;
+        for (let i = 0; i < turns.length; i++) {
+          const tTs = turns[i].userMessage?.created_at || 0;
+          if (tTs >= comp.created_at - 2000) {
+            triggerTurnIdx = i;
+            break;
+          }
+        }
+
+        if (triggerTurnIdx > 0) {
+          matchedTurnIdx = triggerTurnIdx - 1;
+        } else if (triggerTurnIdx === 0) {
+          top.push(comp);
+          continue;
+        } else {
+          matchedTurnIdx = Math.max(0, turns.length - 2);
+        }
+      }
+
+      // Safety check: a compaction boundary can NEVER be after the latest turn,
+      // because the active turn is never compacted into history.
+      if (matchedTurnIdx >= turns.length - 1 && turns.length > 1) {
+        matchedTurnIdx = turns.length - 2;
+      }
+
+      if (matchedTurnIdx >= 0) {
+        const existing = byTurn.get(matchedTurnIdx) || [];
+        existing.push(comp);
+        byTurn.set(matchedTurnIdx, existing);
+      } else {
+        top.push(comp);
+      }
     }
-    return map;
-  }, [compactions, turns]);
+
+    return { compactionsByTurnIndex: byTurn, topCompactions: top };
+  }, [compactions, turns, messages]);
 
   // Build Timeline Minimap items: strictly 1 item per chat turn (1 chat = 1 line)
   const timelineItems = useMemo<TimelineTurnItem[]>(() => {
@@ -598,6 +659,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               </div>
             )}
 
+            {/* Compaction Dividers if older history was compacted before the currently loaded window */}
+            {topCompactions.map((comp) => (
+              <div key={comp.id} className={`${chatWidthClass} mx-auto w-full px-4 py-1`}>
+                <CompactionDivider compaction={comp} />
+              </div>
+            ))}
+
             {/* Find strictly the latest turn that has todos to ensure only 1 card is displayed */}
             {(() => {
               const latestTurnWithTodosId = (() => {
@@ -694,6 +762,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                                       steps={seg.steps}
                                       durationMs={seg.durationMs}
                                       isStreaming={false}
+                                      workdir={currentProject?.workdir_path}
                                       onOpenFileDiff={onOpenFileDiff}
                                       onOpenFile={onOpenFile}
                                       onOpenBrowser={onOpenBrowser}
@@ -790,6 +859,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                               turn.segments[turn.segments.length - 1].type === 'assistant_text'))) && (
                           <div className={`${chatWidthClass} mx-auto w-full px-4`}>
                             <WorkBlock
+                              workdir={currentProject?.workdir_path}
                               steps={[
                                 ...(streamingReasoning
                                   ? [
@@ -889,14 +959,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
                 {/* 5. Compaction Memory Divider if turn marks a compaction boundary */}
                 {(() => {
-                  const compactionToRender = compactionByTurnIndex.get(turnIdx);
-                  if (!compactionToRender) return null;
+                  const compactionsToRender = compactionsByTurnIndex.get(turnIdx);
+                  if (!compactionsToRender || compactionsToRender.length === 0) return null;
 
-                  return (
-                    <div className={`${chatWidthClass} mx-auto w-full px-4 py-1`}>
-                      <CompactionDivider compaction={compactionToRender} />
+                  return compactionsToRender.map((comp) => (
+                    <div key={comp.id} className={`${chatWidthClass} mx-auto w-full px-4 py-1`}>
+                      <CompactionDivider compaction={comp} />
                     </div>
-                  );
+                  ));
                 })()}
               </div>
             );
@@ -912,6 +982,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {(streamingReasoning || filteredLiveToolMessages.length > 0 || !streamingContent) && (
               <div className={`${chatWidthClass} mx-auto w-full px-4`}>
                 <WorkBlock
+                  workdir={currentProject?.workdir_path}
                   steps={
                     liveToolMessages.length > 0
                       ? filteredLiveToolMessages.map((m) => ({

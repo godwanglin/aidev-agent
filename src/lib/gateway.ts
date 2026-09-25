@@ -446,17 +446,16 @@ export async function getAvailableModels(forceRefresh = false): Promise<GatewayM
       }
     }
 
-    // Default fallback models from gateway kita
+    // Default fallback models from gateway kita (public combos only)
     return [
-      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', context_length: 1000000, eligible: true, minTier: 'FREE', minTierName: 'Free' },
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: 1000000, eligible: true, minTier: 'FREE', minTierName: 'Free' },
-      { id: 'gpt-5.5', name: 'GPT-5.5', context_length: 400000, eligible: false, minTier: 'PLUS', minTierName: 'Plus' },
-      { id: 'claude-opus-4.6', name: 'Claude Opus 4.6', context_length: 200000, eligible: false, minTier: 'PRO', minTierName: 'Pro' },
-      { id: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6', context_length: 200000, eligible: false, minTier: 'PRO', minTierName: 'Pro' },
-      { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', context_length: 400000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra' },
-      { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', context_length: 400000, eligible: false, minTier: 'PLUS', minTierName: 'Plus' },
-      { id: 'gpt-6-astra', name: 'GPT-6 Astra', context_length: 1000000, eligible: true, minTier: 'FREE', minTierName: 'Free' },
-      { id: 'aidev-lite:free', name: 'Aidev Lite (Free)', context_length: 128000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra' },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: 1000000, eligible: true, minTier: 'FREE', minTierName: 'Free', minTierBadgeColor: 'gray' },
+      { id: 'gpt-5.5', name: 'GPT-5.5', context_length: 400000, eligible: false, minTier: 'PLUS', minTierName: 'Plus', minTierBadgeColor: 'blue' },
+      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', context_length: 1000000, eligible: false, minTier: 'PRO', minTierName: 'Pro', minTierBadgeColor: 'purple' },
+      { id: 'claude-opus-4.6', name: 'Claude Opus 4.6', context_length: 200000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra', minTierBadgeColor: 'amber' },
+      { id: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6', context_length: 200000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra', minTierBadgeColor: 'amber' },
+      { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', context_length: 400000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra', minTierBadgeColor: 'amber' },
+      { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', context_length: 400000, eligible: false, minTier: 'ULTRA', minTierName: 'Ultra', minTierBadgeColor: 'amber' },
+      { id: 'aidev-lite:free', name: 'Aidev Lite (Free)', context_length: 128000, eligible: true, minTier: 'FREE', minTierName: 'Free', minTierBadgeColor: 'gray' },
     ];
   }
 }

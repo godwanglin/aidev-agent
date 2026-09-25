@@ -15,6 +15,7 @@ export interface WorkBlockProps {
   onOpenFileDiff?: (filePath: string) => void;
   onOpenFile?: (filePath: string, lineRange?: { startLine?: number; endLine?: number }) => void;
   onOpenBrowser?: (url: string) => void;
+  workdir?: string;
   defaultOpen?: boolean;
   verbose?: boolean;
   latestUpdateTodosId?: string | null;
@@ -38,6 +39,7 @@ export const WorkBlock = React.memo<WorkBlockProps>(function WorkBlock({
   onOpenFileDiff,
   onOpenFile,
   onOpenBrowser,
+  workdir,
   defaultOpen = false,
   verbose = true,
   latestUpdateTodosId,
@@ -189,6 +191,7 @@ export const WorkBlock = React.memo<WorkBlockProps>(function WorkBlock({
                 onOpenFileDiff={onOpenFileDiff}
                 onOpenFile={onOpenFile}
                 onOpenBrowser={onOpenBrowser}
+                workdir={workdir}
                 verbose={verbose}
                 latestUpdateTodosId={latestUpdateTodosId}
               />

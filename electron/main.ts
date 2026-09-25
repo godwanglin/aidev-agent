@@ -11,6 +11,9 @@ let activePort: number = 63027;
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
+// Ensure crisp, sharp font rendering and disable blurry Windows DWM bitmap stretching on High-DPI screens
+app.commandLine.appendSwitch('high-dpi-support', '1');
+
 /**
  * Checks if a specific port is free to listen on.
  */

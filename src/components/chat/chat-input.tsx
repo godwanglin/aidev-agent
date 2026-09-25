@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowRight,
@@ -111,6 +111,25 @@ export const ModelProviderIcon: React.FC<{ modelId: string; className?: string }
   return <Sparkles className={className} />;
 };
 
+function getModelProvider(model: GatewayModel): { key: string; name: string; order: number } {
+  const owned = (model.owned_by || '').toLowerCase();
+  const id = (model.id || '').toLowerCase();
+
+  if (owned === 'google' || id.includes('gemini') || id.includes('google')) {
+    return { key: 'google', name: 'Google', order: 1 };
+  }
+  if (owned === 'anthropic' || id.includes('claude') || id.includes('anthropic') || id.includes('sonnet') || id.includes('opus') || id.includes('haiku')) {
+    return { key: 'anthropic', name: 'Anthropic', order: 2 };
+  }
+  if (owned === 'openai' || id.includes('gpt') || id.includes('openai') || id.includes('o1') || id.includes('o3') || id.includes('terra') || id.includes('luna') || id.includes('sol') || id.includes('astra')) {
+    return { key: 'openai', name: 'OpenAI', order: 3 };
+  }
+  if (owned === 'deepseek' || id.includes('deepseek')) {
+    return { key: 'deepseek', name: 'DeepSeek', order: 4 };
+  }
+  return { key: 'aidev', name: 'AIdev', order: 5 };
+}
+
 interface ChatInputProps {
   onSendMessage: (content: string, images?: AttachedImage[]) => void;
   onStop?: () => void;
@@ -189,6 +208,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const [hoveredLockedModel, setHoveredLockedModel] = useState<{ model: GatewayModel; rect: DOMRect } | null>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const sortedModels = useMemo(() => {
+    return [...models].sort((a, b) => {
+      const pA = getModelProvider(a).order;
+      const pB = getModelProvider(b).order;
+      return pA - pB;
+    });
+  }, [models]);
 
   const handleOpenBilling = useCallback(() => {
     const billingUrl = 'https://aidev.weebinhub.biz.id/billing';
@@ -2026,7 +2053,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   className="w-full sm:w-72 max-h-[75vh] sm:max-h-80 overflow-y-auto sm:bottom-full sm:left-0 sm:right-auto sm:mb-2 bg-[#181818] border-t sm:border border-[#2a2a2a] p-2 sm:p-1"
                 >
                   <div className="p-1 space-y-0.5">
-                    {models.map((m) => {
+                    {sortedModels.map((m) => {
                       const isLocked = m.eligible === false;
                       const hasTierBadge = Boolean(m.minTierName && m.minTier && m.minTier !== 'FREE');
                       const isSelected = m.id === selectedModel;
@@ -2036,7 +2063,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                           key={m.id}
                           type="button"
                           onMouseEnter={(e) => {
-                            if (isLocked || hasTierBadge) {
+                            if (isLocked) {
                               if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
                               const rect = e.currentTarget.getBoundingClientRect();
                               setHoveredLockedModel({ model: m, rect });
