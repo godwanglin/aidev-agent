@@ -10,6 +10,7 @@ import {
   EyeOff,
   Pencil,
   Folder,
+  Globe,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -476,6 +477,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newSkillContent, setNewSkillContent] = useState('');
   const [importSkillUrl, setImportSkillUrl] = useState('');
   const [rawSkillMarkdown, setRawSkillMarkdown] = useState('');
+  const [importSkillScope, setImportSkillScope] = useState<'global' | 'workspace'>('global');
   const [isSubmittingSkill, setIsSubmittingSkill] = useState(false);
   const [skillFormError, setSkillFormError] = useState<string | null>(null);
 
@@ -1141,6 +1143,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           return;
         }
         payload.importUrl = importSkillUrl.trim();
+        payload.scope = importSkillScope;
         if (newSkillName.trim()) payload.name = newSkillName.trim();
         if (newSkillDescription.trim()) payload.description = newSkillDescription.trim();
       } else if (addSkillTab === 'paste') {
@@ -1176,6 +1179,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setImportSkillUrl('');
       setRawSkillMarkdown('');
       setSkillFormError(null);
+
+      if (data.count && data.count > 1) {
+        customAlert({
+          title: 'Skills Imported',
+          message: `Successfully imported ${data.count} skills from GitHub collection!`,
+          variant: 'success',
+        });
+      }
 
       await fetchSkills();
     } catch (err: any) {
@@ -3782,11 +3793,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="text"
                     value={importSkillUrl}
                     onChange={(e) => setImportSkillUrl(e.target.value)}
-                    placeholder="https://raw.githubusercontent.com/user/repo/main/skills/docker"
+                    placeholder="https://github.com/user/repo/tree/main/skills"
                     className="w-full bg-[#101010] border border-[#26262a] rounded-lg px-3 py-1.5 text-[11.5px] font-mono text-white placeholder-[#555] focus:outline-none focus:border-blue-500"
                   />
                   <div className="text-[11px] text-[#868686] leading-relaxed">
-                    Enter the GitHub skill folder URL (e.g. https://raw.githubusercontent.com/.../skills/docker or https://github.com/.../tree/main/skills/docker). All files in the folder will be auto-discovered and installed.
+                    Supports individual skills or multi-skill repositories. All skills inside will be automatically unpacked and registered!
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[12px] font-medium text-[#dededf]">
+                    Install Location
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportSkillScope('global')}
+                      className={`px-3 py-2 rounded-lg border text-left transition cursor-pointer ${
+                        importSkillScope === 'global'
+                          ? 'border-blue-500/50 bg-blue-500/10 text-white'
+                          : 'border-[#26262a] bg-[#121214] text-[#888] hover:text-[#ccc]'
+                      }`}
+                    >
+                      <div className="text-[11.5px] font-medium flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-blue-400" />
+                        Global (~/.aidev)
+                      </div>
+                      <div className="text-[10px] text-[#666] mt-0.5">Available across all projects</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!currentProject?.workdir_path}
+                      onClick={() => setImportSkillScope('workspace')}
+                      className={`px-3 py-2 rounded-lg border text-left transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                        importSkillScope === 'workspace'
+                          ? 'border-blue-500/50 bg-blue-500/10 text-white'
+                          : 'border-[#26262a] bg-[#121214] text-[#888] hover:text-[#ccc]'
+                      }`}
+                    >
+                      <div className="text-[11.5px] font-medium flex items-center gap-1.5">
+                        <Folder className="w-3.5 h-3.5 text-emerald-400" />
+                        Current Workspace
+                      </div>
+                      <div className="text-[10px] text-[#666] mt-0.5">Project skills/installed</div>
+                    </button>
                   </div>
                 </div>
 

@@ -37,13 +37,14 @@ export async function POST(req: Request) {
 
     // Case 1: Import from GitHub / Raw folder URL
     if (importUrl) {
-      const skill = await installSkillFromUrl({
+      const result = await installSkillFromUrl({
         importUrl,
         workdir,
+        scope: body.scope,
         overrideName: name,
         overrideDesc: description,
       });
-      return NextResponse.json({ success: true, skill });
+      return NextResponse.json({ success: true, ...result, skill: result.installedSkills?.[0] || result });
     }
 
     // Case 2: Manual creation or raw markdown paste

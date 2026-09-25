@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getOpenAIClient } from './gateway';
+import { safeJsonParse, repairJson } from './json-repair';
 import { AGENT_TOOLS, CALL_MCP_TOOL_DEF, formatMcpToolForOpenAi, dispatchToolCall } from './tools';
 import { mcpClientManager } from './mcp/client-manager';
 import {
@@ -59,8 +60,8 @@ export function parseInlineToolCalls(content: string): {
   if (toolCalls.length === 0) {
     const xmlToolRegex = /<(?:function_call|tool_call)>([\s\S]*?)<\/(?:function_call|tool_call)>/gi;
     while ((match = xmlToolRegex.exec(content)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1].trim());
+      const parsed = safeJsonParse(match[1].trim(), null);
+      if (parsed && typeof parsed === 'object') {
         const name = parsed.name || parsed.function || parsed.tool;
         const args = parsed.arguments || parsed.parameters || parsed.args || {};
         if (name) {
@@ -70,7 +71,7 @@ export function parseInlineToolCalls(content: string): {
             arguments: typeof args === 'string' ? args : JSON.stringify(args),
           });
         }
-      } catch {}
+      }
     }
   }
 
@@ -78,8 +79,8 @@ export function parseInlineToolCalls(content: string): {
   if (toolCalls.length === 0) {
     const mdToolRegex = /```(?:tool_call|function_call)\s*\n([\s\S]*?)\n```/gi;
     while ((match = mdToolRegex.exec(content)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1].trim());
+      const parsed = safeJsonParse(match[1].trim(), null);
+      if (parsed && typeof parsed === 'object') {
         const name = parsed.name || parsed.function || parsed.tool;
         const args = parsed.arguments || parsed.parameters || parsed.args || {};
         if (name) {
@@ -89,7 +90,7 @@ export function parseInlineToolCalls(content: string): {
             arguments: typeof args === 'string' ? args : JSON.stringify(args),
           });
         }
-      } catch {}
+      }
     }
   }
 
@@ -670,7 +671,16 @@ export class AgentOrchestrator {
         }
       } catch (streamErr: any) {
         if (!this.isAborted && streamErr.name !== 'AbortError') {
-          throw streamErr;
+          // If the stream interrupted (e.g. malformed SSE chunk, network drop, keep-alive glitch),
+          // but we already received valid tool calls or substantial content, recover gracefully!
+          if (currentToolCalls.length > 0 || fullContent.trim().length > 0) {
+            logAgent(
+              `Stream interrupted in session ${this.sessionId}, but safely recovered ${currentToolCalls.length} tool calls and ${fullContent.length} chars of content:`,
+              streamErr.message
+            );
+          } else {
+            throw streamErr;
+          }
         }
       }
 
@@ -937,12 +947,7 @@ export class AgentOrchestrator {
           this.onEvent({ type: 'done', data: { status: 'STOPPED' } });
           return;
         }
-        let parsedArgs: any = {};
-        try {
-          parsedArgs = JSON.parse(tc.arguments || '{}');
-        } catch {
-          parsedArgs = { raw: tc.arguments };
-        }
+        const parsedArgs: any = safeJsonParse(tc.arguments || '{}', { raw: tc.arguments });
 
         // Handle Interactive Question Card for /plan or Clarifications
         if (tc.name === 'ask_question') {
@@ -1365,7 +1370,7 @@ export class AgentOrchestrator {
       return;
     }
 
-    const parsedArgs = JSON.parse(pendingMsg.tool_arguments || '{}');
+    const parsedArgs = safeJsonParse(pendingMsg.tool_arguments || '{}', {});
     const toolName = pendingMsg.tool_name || '';
 
     // Extract userGoal and commandMode from recent message history
@@ -2038,7 +2043,7 @@ Directives:
         const item: any = { role: 'assistant', content: msg.content || null };
         if (msg.tool_arguments) {
           try {
-            const parsed = JSON.parse(msg.tool_arguments);
+            const parsed = safeJsonParse(msg.tool_arguments, null);
             if (Array.isArray(parsed) && parsed.length > 0) {
               item.tool_calls = parsed.map((tc: any) => ({
                 id: tc.id,

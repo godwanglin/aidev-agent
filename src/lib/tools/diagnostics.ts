@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import fg from 'fast-glob';
+import { createRequire } from 'module';
 // Dynamic optional import for runtime safety when typescript is in devDependencies
 import { sanitizeAndResolvePath } from '../security';
 
@@ -52,7 +53,10 @@ function loadTypeScript(workdir?: string): any | null {
       if (typeof (globalThis as any).__non_webpack_require__ !== 'undefined') {
         return (globalThis as any).__non_webpack_require__;
       }
-      return eval('require');
+      if (typeof require !== 'undefined') {
+        return require;
+      }
+      return createRequire(import.meta.url);
     } catch {
       return null;
     }
@@ -125,7 +129,10 @@ export async function executeGetDiagnostics(
 
       if (targetFileAbs) {
         const normTarget = targetFileAbs.replace(/\\/g, '/');
-        const sourceFile = program.getSourceFile(targetFileAbs) || program.getSourceFile(normTarget);
+        const sourceFile =
+          program.getSourceFile(targetFileAbs) ||
+          program.getSourceFile(normTarget) ||
+          program.getSourceFiles().find((f: any) => f.fileName.toLowerCase() === normTarget.toLowerCase());
         if (sourceFile) {
           const syntactic = program.getSyntacticDiagnostics(sourceFile);
           const semantic = program.getSemanticDiagnostics(sourceFile);

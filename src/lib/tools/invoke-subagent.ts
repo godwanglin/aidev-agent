@@ -1,6 +1,7 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { subagentRepo, SubagentRecord, sessionRepo } from '../db';
 import { getOpenAIClient } from '../gateway';
+import { safeJsonParse } from '../json-repair';
 import { executeReadFile } from './read-file';
 import { executeGlob } from './glob';
 import { executeSearchFiles } from './search-files';
@@ -221,12 +222,7 @@ export async function executeInvokeSubagent(
 
       // Execute tool calls
       for (const tc of toolCalls) {
-        let args: any = {};
-        try {
-          args = JSON.parse(tc.function.arguments || '{}');
-        } catch {
-          args = {};
-        }
+        const args: any = safeJsonParse(tc.function.arguments || '{}', {});
 
         let toolResult: any;
         try {

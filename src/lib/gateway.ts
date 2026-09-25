@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import { loadSettings, getStoragePaths, ensureStorageInitialized } from './storage';
 import { formatModelDisplayName } from './model-utils';
+import { createSafeSseFetch } from './json-repair';
 
 export interface GatewayModel {
   id: string;
@@ -44,6 +45,7 @@ export function getOpenAIClient(): OpenAI {
   return new OpenAI({
     baseURL: settings.gatewayUrl,
     apiKey: settings.apiKey || process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444',
+    fetch: createSafeSseFetch(),
   });
 }
 
