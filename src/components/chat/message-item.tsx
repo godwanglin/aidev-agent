@@ -714,12 +714,21 @@ export const MessageItem = React.memo<MessageItemProps>(function MessageItem({
         if (Array.isArray(parsed)) {
           userText = parsed.find((p: any) => p.type === 'text')?.text || '';
           attachedImages = parsed
-            .filter((p: any) => p.type === 'image_url' && (p.image_url?.url || p.url))
-            .map((p: any, idx: number) => ({
-              id: p.image_id ? String(p.image_id) : String(idx + 1),
-              name: p.name,
-              url: p.image_url?.url || p.url,
-            }));
+            .filter((p: any) => p.type === 'image_url' && (p.image_url?.url || p.url || p.file_path || p.filename))
+            .map((p: any, idx: number) => {
+              let url = p.image_url?.url || p.url;
+              if (!url && p.file_path) {
+                url = `/api/media?path=${encodeURIComponent(p.file_path)}`;
+              } else if (!url && p.filename) {
+                url = `/api/media?file=${encodeURIComponent(p.filename)}&sessionId=${message.session_id}`;
+              }
+              return {
+                id: p.image_id ? String(p.image_id) : String(idx + 1),
+                name: p.name || p.filename,
+                url: url || '',
+                filePath: p.file_path,
+              };
+            });
         }
       } catch {}
     }

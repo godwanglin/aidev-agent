@@ -223,6 +223,7 @@ export class AgentOrchestrator {
       for (let idx = 0; idx < images.length; idx++) {
         const img = images[idx];
         let savedFileName = img.name || '';
+        let savedFilePath = '';
 
         // If base64 data URL, persist physically to session user_uploads directory
         if (img.url && typeof img.url === 'string' && img.url.startsWith('data:')) {
@@ -238,20 +239,26 @@ export class AgentOrchestrator {
               else if (mimeType.includes('svg')) ext = '.svg';
 
               savedFileName = `media_${Date.now()}_${idx}${ext}`;
-              const filePath = path.join(chatStorage.uploads, savedFileName);
-              fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+              savedFilePath = path.join(chatStorage.uploads, savedFileName);
+              fs.writeFileSync(savedFilePath, Buffer.from(base64Data, 'base64'));
             }
           } catch (saveErr) {
             console.error('Failed saving uploaded image to chatStorage.uploads:', saveErr);
           }
         }
 
+        // Store lightweight media endpoint and absolute file_path in DB, NEVER the 2MB raw base64 string!
+        const mediaUrl = savedFileName
+          ? `/api/media?file=${encodeURIComponent(savedFileName)}&sessionId=${this.sessionId}`
+          : (img.url?.startsWith('data:') ? '' : img.url);
+
         parts.push({
           type: 'image_url',
           image_id: img.id,
           name: img.name || savedFileName,
           filename: savedFileName,
-          image_url: { url: img.url },
+          file_path: savedFilePath,
+          image_url: { url: mediaUrl },
         });
       }
       storedContent = JSON.stringify(parts);
@@ -2146,17 +2153,62 @@ Directives:
               content = parsed.map((p: any) => {
                 if (p.type === 'image_url') {
                   const url = p.image_url?.url || p.url || '';
-                  if (!isRecentVisionTurn && url.startsWith('data:image/')) {
+                  if (!isRecentVisionTurn) {
                     return {
                       type: 'text',
-                      text: `[Attached image: ${p.name || 'Image'} (already processed in previous turn)]`,
+                      text: `[Attached image: ${p.name || 'Image'}${p.file_path ? ` | Local file path: ${p.file_path}` : ''} (already processed in previous turn)]`,
                     };
                   }
+
+                  // Resolve the image payload for cloud vision LLM
+                  let resolvedUrl = url;
+                  if (!resolvedUrl.startsWith('data:')) {
+                    let diskPath = p.file_path;
+                    if (!diskPath || !fs.existsSync(diskPath)) {
+                      if (p.filename) {
+                        try {
+                          const chatStorage = getChatStorage(session.project_id, this.sessionId);
+                          const cand = path.join(chatStorage.uploads, p.filename);
+                          if (fs.existsSync(cand)) diskPath = cand;
+                        } catch {}
+                      }
+                    }
+                    if (diskPath && fs.existsSync(diskPath)) {
+                      try {
+                        const ext = path.extname(diskPath).toLowerCase();
+                        let mime = 'image/png';
+                        if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+                        else if (ext === '.webp') mime = 'image/webp';
+                        else if (ext === '.gif') mime = 'image/gif';
+                        else if (ext === '.svg') mime = 'image/svg+xml';
+                        const b64 = fs.readFileSync(diskPath).toString('base64');
+                        resolvedUrl = `data:${mime};base64,${b64}`;
+                      } catch (readErr) {
+                        console.error('Failed reading image from disk for vision turn:', readErr);
+                      }
+                    }
+                  }
+
                   return {
                     type: 'image_url',
-                    image_url: { url },
+                    image_url: { url: resolvedUrl },
                   };
                 }
+
+                if (p.type === 'text') {
+                  // Expose local file paths of attached images so coding agent can read/crop/process them directly
+                  const imagePaths = parsed
+                    .filter((img: any) => img.type === 'image_url' && img.file_path)
+                    .map((img: any) => `[Image: ${img.name || img.filename} -> Local Disk Path: ${img.file_path}]`);
+                  if (imagePaths.length > 0 && !p.text.includes('Local Disk Path:')) {
+                    return {
+                      type: 'text',
+                      text: `${p.text}\n\n(Local image files on disk for tools/processing:\n${imagePaths.join('\n')})`,
+                    };
+                  }
+                  return p;
+                }
+
                 return p;
               });
             }

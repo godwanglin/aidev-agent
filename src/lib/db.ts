@@ -249,6 +249,60 @@ export function getDb(): DatabaseSync {
     // Column already exists
   }
 
+  // Automatic storage optimization: purge any legacy raw base64 data URLs to disk files
+  try {
+    const b64Rows = dbInstance
+      .prepare("SELECT id, session_id, content FROM messages WHERE content LIKE '%data:image/%' LIMIT 100")
+      .all() as { id: string; session_id: string; content: string }[];
+
+    if (b64Rows && b64Rows.length > 0) {
+      for (const row of b64Rows) {
+        try {
+          if (row.content && row.content.startsWith('[{"type":')) {
+            const parsed = JSON.parse(row.content);
+            if (Array.isArray(parsed)) {
+              const sess = dbInstance.prepare('SELECT project_id FROM sessions WHERE id = ?').get(row.session_id) as any;
+              const pId = sess?.project_id || 'default';
+              const chatStorage = getChatStorage(pId, row.session_id);
+              if (!fs.existsSync(chatStorage.uploads)) {
+                fs.mkdirSync(chatStorage.uploads, { recursive: true });
+              }
+
+              let mod = false;
+              for (let idx = 0; idx < parsed.length; idx++) {
+                const part = parsed[idx];
+                if (part.type === 'image_url' && part.image_url?.url && part.image_url.url.startsWith('data:image/')) {
+                  const match = /^data:(image\/[a-zA-Z0-9+]+);base64,(.+)$/.exec(part.image_url.url);
+                  if (match) {
+                    const mimeType = match[1];
+                    let ext = '.png';
+                    if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
+                    else if (mimeType.includes('gif')) ext = '.gif';
+                    else if (mimeType.includes('webp')) ext = '.webp';
+                    else if (mimeType.includes('svg')) ext = '.svg';
+
+                    const savedFileName = part.filename || `media_${Date.now()}_${idx}${ext}`;
+                    const filePath = path.join(chatStorage.uploads, savedFileName);
+                    if (!fs.existsSync(filePath)) {
+                      fs.writeFileSync(filePath, Buffer.from(match[2], 'base64'));
+                    }
+                    part.filename = savedFileName;
+                    part.file_path = filePath;
+                    part.image_url.url = `/api/media?file=${encodeURIComponent(savedFileName)}&sessionId=${row.session_id}`;
+                    mod = true;
+                  }
+                }
+              }
+              if (mod) {
+                dbInstance.prepare('UPDATE messages SET content = ? WHERE id = ?').run(JSON.stringify(parsed), row.id);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
   return dbInstance;
 }
 
@@ -511,6 +565,52 @@ export const messageRepo = {
   },
   create(msg: MessageRecord): void {
     const db = getDb();
+    let finalContent = msg.content ?? null;
+
+    // Safety net: if content contains raw base64 data:image/, persist to disk and store file_path
+    if (finalContent && finalContent.includes('data:image/')) {
+      try {
+        if (finalContent.startsWith('[{"type":')) {
+          const parsed = JSON.parse(finalContent);
+          if (Array.isArray(parsed)) {
+            const session = sessionRepo.getById(msg.session_id);
+            const projectId = session?.project_id || 'default';
+            const chatStorage = getChatStorage(projectId, msg.session_id);
+            if (!fs.existsSync(chatStorage.uploads)) {
+              fs.mkdirSync(chatStorage.uploads, { recursive: true });
+            }
+
+            for (let idx = 0; idx < parsed.length; idx++) {
+              const part = parsed[idx];
+              if (part.type === 'image_url' && part.image_url?.url && part.image_url.url.startsWith('data:image/')) {
+                const match = /^data:(image\/[a-zA-Z0-9+]+);base64,(.+)$/.exec(part.image_url.url);
+                if (match) {
+                  const mimeType = match[1];
+                  let ext = '.png';
+                  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
+                  else if (mimeType.includes('gif')) ext = '.gif';
+                  else if (mimeType.includes('webp')) ext = '.webp';
+                  else if (mimeType.includes('svg')) ext = '.svg';
+
+                  const savedFileName = part.filename || `media_${Date.now()}_${idx}${ext}`;
+                  const filePath = path.join(chatStorage.uploads, savedFileName);
+                  if (!fs.existsSync(filePath)) {
+                    fs.writeFileSync(filePath, Buffer.from(match[2], 'base64'));
+                  }
+                  part.filename = savedFileName;
+                  part.file_path = filePath;
+                  part.image_url.url = `/api/media?file=${encodeURIComponent(savedFileName)}&sessionId=${msg.session_id}`;
+                }
+              }
+            }
+            finalContent = JSON.stringify(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Failed offloading base64 to disk in messageRepo.create:', err);
+      }
+    }
+
     const stmt = db.prepare(`
       INSERT INTO messages (id, session_id, role, content, reasoning_content, tool_call_id, tool_name, tool_arguments, tool_result, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -519,7 +619,7 @@ export const messageRepo = {
       msg.id,
       msg.session_id,
       msg.role,
-      msg.content ?? null,
+      finalContent,
       msg.reasoning_content ?? null,
       msg.tool_call_id ?? null,
       msg.tool_name ?? null,
