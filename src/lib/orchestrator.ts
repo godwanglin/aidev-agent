@@ -1949,10 +1949,25 @@ Directives:
           // Anchor the initial session goal
           const firstUser = history.find((m) => m.role === 'user');
           if (firstUser && history.indexOf(firstUser) <= lastIdx && firstUser.content) {
-            rawMessages.push({
-              role: 'user',
-              content: `[Session Initial Goal Anchor]:\n${firstUser.content}`,
-            });
+            let anchorText = firstUser.content;
+            if (anchorText.startsWith('[{"type":')) {
+              try {
+                const parsed = JSON.parse(anchorText);
+                if (Array.isArray(parsed)) {
+                  anchorText = parsed
+                    .filter((p: any) => p.type === 'text')
+                    .map((p: any) => p.text)
+                    .join(' ')
+                    .trim();
+                }
+              } catch {}
+            }
+            if (anchorText) {
+              rawMessages.push({
+                role: 'user',
+                content: `[Session Initial Goal Anchor]:\n${anchorText}`,
+              });
+            }
           }
           // Inject the compacted memory checkpoint
           rawMessages.push({
@@ -1964,10 +1979,25 @@ Directives:
           const partition = partitionHistory(history, COMPACTION_CONSTANTS.DEFAULT_RECENT_TURNS);
           if (partition.messagesToCompact.length > 0) {
             if (partition.initialGoalMessage && partition.initialGoalMessage.content) {
-              rawMessages.push({
-                role: 'user',
-                content: `[Session Initial Goal Anchor]:\n${partition.initialGoalMessage.content}`,
-              });
+              let anchorText = partition.initialGoalMessage.content;
+              if (anchorText.startsWith('[{"type":')) {
+                try {
+                  const parsed = JSON.parse(anchorText);
+                  if (Array.isArray(parsed)) {
+                    anchorText = parsed
+                      .filter((p: any) => p.type === 'text')
+                      .map((p: any) => p.text)
+                      .join(' ')
+                      .trim();
+                  }
+                } catch {}
+              }
+              if (anchorText) {
+                rawMessages.push({
+                  role: 'user',
+                  content: `[Session Initial Goal Anchor]:\n${anchorText}`,
+                });
+              }
             }
             rawMessages.push({
               role: 'assistant',
@@ -1980,6 +2010,14 @@ Directives:
     } catch (compactInspectErr) {
       console.error('Failed inspecting session compaction for formatOpenAiMessages:', compactInspectErr);
     }
+
+    // Pre-calculate user message indices to keep full base64 images only for the most recent 2 user turns.
+    // Older user turns in active memory retain lightweight text markers to avoid sending MBs of base64 on every turn.
+    const userIndicesInSlice = messagesToProcess
+      .map((m, idx) => (m.role === 'user' ? idx : -1))
+      .filter((idx) => idx !== -1);
+    const recentVisionThreshold =
+      userIndicesInSlice.length > 2 ? userIndicesInSlice[userIndicesInSlice.length - 2] : 0;
 
     for (let i = 0; i < messagesToProcess.length; i++) {
       const msg = messagesToProcess[i];
@@ -2104,11 +2142,19 @@ Directives:
           try {
             const parsed = JSON.parse(content);
             if (Array.isArray(parsed)) {
+              const isRecentVisionTurn = i >= recentVisionThreshold;
               content = parsed.map((p: any) => {
                 if (p.type === 'image_url') {
+                  const url = p.image_url?.url || p.url || '';
+                  if (!isRecentVisionTurn && url.startsWith('data:image/')) {
+                    return {
+                      type: 'text',
+                      text: `[Attached image: ${p.name || 'Image'} (already processed in previous turn)]`,
+                    };
+                  }
                   return {
                     type: 'image_url',
-                    image_url: { url: p.image_url?.url || p.url },
+                    image_url: { url },
                   };
                 }
                 return p;

@@ -1440,10 +1440,20 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
   // Estimated Token Count for Context Badge taking compactions into account
   const estimatedTokens = useMemo(() => {
+    const calcMsgTokens = (m: MessageRecord | { content?: string | null; tool_arguments?: string | null }) => {
+      const text = (m.content || '') + (m.tool_arguments || '');
+      if (!text.includes('data:image/')) {
+        return Math.ceil((text.length + 20) / 3.5);
+      }
+      const imageCount = (text.match(/data:image\/[a-zA-Z0-9.+-]+;base64,/g) || []).length;
+      const cleanLen = text.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[^"'\s]+/g, '').length;
+      return Math.ceil((cleanLen + 20) / 3.5) + (imageCount * 1000);
+    };
+
     if (!compactions || compactions.length === 0) {
       let count = 0;
       for (const m of messages) {
-        count += Math.ceil(((m.content?.length || 0) + (m.tool_arguments?.length || 0) + 20) / 3.5);
+        count += calcMsgTokens(m);
       }
       return count;
     }
@@ -1455,11 +1465,11 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       let count = Math.ceil(((latest.summary?.length || 0) + 50) / 3.5);
       const firstUser = messages.find((m) => m.role === 'user');
       if (firstUser && messages.indexOf(firstUser) <= lastCompactIdx) {
-        count += Math.ceil(((firstUser.content?.length || 0) + 20) / 3.5);
+        count += calcMsgTokens(firstUser);
       }
       for (let i = lastCompactIdx + 1; i < messages.length; i++) {
         const m = messages[i];
-        count += Math.ceil(((m.content?.length || 0) + (m.tool_arguments?.length || 0) + 20) / 3.5);
+        count += calcMsgTokens(m);
       }
       return count;
     }
@@ -1467,10 +1477,12 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     let postCompactTokens = 0;
     for (const m of messages) {
       if (m.created_at > latest.created_at) {
-        postCompactTokens += Math.ceil(((m.content?.length || 0) + (m.tool_arguments?.length || 0) + 20) / 3.5);
+        postCompactTokens += calcMsgTokens(m);
       }
     }
-    return (latest.tokens_after || 0) + postCompactTokens;
+    const summaryTokens = Math.ceil(((latest.summary?.length || 0) + 50) / 3.5);
+    const baseTokens = (latest.tokens_after && latest.tokens_after < 100000) ? latest.tokens_after : summaryTokens;
+    return baseTokens + postCompactTokens;
   }, [messages, compactions]);
 
   // Resolve active model context window and display name

@@ -17,10 +17,19 @@ export const COMPACTION_CONSTANTS = {
 
 /**
  * Estimates token count from text using standard 3.5 chars/token heuristic.
+ * If text contains embedded base64 image data URLs, strips the binary payload
+ * and attributes ~1,000 vision tokens per image instead of treating 2MB of base64 as 600,000 text tokens.
  */
 export function estimateTokens(text: string | null | undefined): number {
   if (!text) return 0;
-  return Math.ceil(text.length / COMPACTION_CONSTANTS.CHARS_PER_TOKEN);
+  if (!text.includes('data:image/')) {
+    return Math.ceil(text.length / COMPACTION_CONSTANTS.CHARS_PER_TOKEN);
+  }
+  const imageMatches = text.match(/data:image\/[a-zA-Z0-9.+-]+;base64,/g) || [];
+  const cleaned = text.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[^"'\s]+/g, '');
+  const textTokens = Math.ceil(cleaned.length / COMPACTION_CONSTANTS.CHARS_PER_TOKEN);
+  const imageTokens = imageMatches.length * 1000;
+  return textTokens + imageTokens;
 }
 
 /**
@@ -85,21 +94,22 @@ export function partitionHistory(
     }
   }
 
-  // Determine recent turns:
-  // For manual compaction, strictly respect baseRecentTurns (e.g. 1-2 turns)
-  // For auto-compaction, adaptively keep at least baseRecentTurns or up to 35% of turns
   const totalUserTurns = userIndices.length;
   let recentTurnsCount = isManual
-    ? baseRecentTurns
+    ? Math.min(baseRecentTurns, Math.max(0, totalUserTurns - 1))
     : Math.max(baseRecentTurns, Math.floor(totalUserTurns * 0.35));
-  if (recentTurnsCount >= totalUserTurns) {
-    recentTurnsCount = Math.max(1, totalUserTurns - 1);
+
+  if (recentTurnsCount >= totalUserTurns && totalUserTurns > 0) {
+    recentTurnsCount = Math.max(0, totalUserTurns - 1);
   }
 
   // Find cutoff index for recent buffer
   let cutoffIdx = 0;
-  if (totalUserTurns > recentTurnsCount) {
+  if (totalUserTurns > recentTurnsCount && recentTurnsCount > 0) {
     cutoffIdx = userIndices[totalUserTurns - recentTurnsCount];
+  } else if (recentTurnsCount === 0 && history.length > 1) {
+    // For manual compaction requesting minimal buffer, leave only the very last assistant message
+    cutoffIdx = history.length - 1;
   } else {
     cutoffIdx = Math.max(1, Math.floor(history.length / 2));
   }
@@ -112,26 +122,23 @@ export function partitionHistory(
   const rawToCompact = history.slice(0, cutoffIdx);
   const recentBuffer = history.slice(cutoffIdx);
 
-  // If initialGoalMessage is included in rawToCompact, we can exclude it from
-  // rawToCompact if it's the exact first message, so it acts purely as the anchor
+  // If initialGoalMessage is included in rawToCompact, exclude it only if not manual
   const messagesToCompact = rawToCompact.filter((m) => {
-    if (initialGoalMessage && m.id === initialGoalMessage.id) {
+    if (initialGoalMessage && m.id === initialGoalMessage.id && !isManual) {
       return false;
     }
     return true;
   });
 
-  // If messagesToCompact is empty (e.g. cutoff was right after first user message),
-  // but history has multiple messages, adjust cutoff forward so we have messages to compact
-  if (messagesToCompact.length === 0 && history.length > 2) {
-    const nextCutoff = Math.max(2, history.length - 1);
+  // If messagesToCompact is empty but history has multiple messages, adjust cutoff forward so we have messages to compact
+  if (messagesToCompact.length === 0 && history.length > 1) {
+    const nextCutoff = Math.max(1, history.length - 1);
     const adjustedRaw = history.slice(0, nextCutoff);
     const adjustedBuffer = history.slice(nextCutoff);
-    const adjustedToCompact = adjustedRaw.filter((m) => !initialGoalMessage || m.id !== initialGoalMessage.id);
-    if (adjustedToCompact.length > 0) {
+    if (adjustedRaw.length > 0) {
       return {
         initialGoalMessage,
-        messagesToCompact: adjustedToCompact,
+        messagesToCompact: adjustedRaw,
         recentBuffer: adjustedBuffer,
         tokensBefore: totalTokens,
       };
@@ -239,14 +246,25 @@ export function prepareMessagesForSummarizer(messages: MessageRecord[]): string 
 
       let body = '';
       if (m.content) {
-        if (m.content.length > COMPACTION_CONSTANTS.MAX_TOOL_OUTPUT_CHARS_FOR_SUMMARY) {
+        let contentToUse = m.content;
+        if (contentToUse.includes('data:image/')) {
+          contentToUse = contentToUse.replace(
+            /data:image\/[a-zA-Z0-9.+-]+;base64,[^"'\s]+/g,
+            '[User Attached Image (Base64 omitted for summary)]'
+          );
+        }
+        if (contentToUse.length > COMPACTION_CONSTANTS.MAX_TOOL_OUTPUT_CHARS_FOR_SUMMARY) {
           const half = Math.floor(COMPACTION_CONSTANTS.MAX_TOOL_OUTPUT_CHARS_FOR_SUMMARY / 2);
-          body = `${m.content.slice(0, half)}\n\n[... ${m.content.length - COMPACTION_CONSTANTS.MAX_TOOL_OUTPUT_CHARS_FOR_SUMMARY} characters truncated for summary ...]\n\n${m.content.slice(-half)}`;
+          body = `${contentToUse.slice(0, half)}\n\n[... ${contentToUse.length - COMPACTION_CONSTANTS.MAX_TOOL_OUTPUT_CHARS_FOR_SUMMARY} characters truncated for summary ...]\n\n${contentToUse.slice(-half)}`;
         } else {
-          body = m.content;
+          body = contentToUse;
         }
       } else if (m.tool_arguments) {
-        body = `Arguments: ${m.tool_arguments}`;
+        let argsToUse = m.tool_arguments;
+        if (argsToUse.includes('data:image/')) {
+          argsToUse = argsToUse.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[^"'\s]+/g, '[Image Data]');
+        }
+        body = `Arguments: ${argsToUse}`;
       } else if (m.reasoning_content) {
         body = `Reasoning excerpt: ${m.reasoning_content.slice(0, 300)}...`;
       }
@@ -347,7 +365,7 @@ export async function runCompaction(
   if (!session) return null;
 
   const history = messageRepo.listBySession(sessionId);
-  const minRequiredMessages = isManual ? 3 : COMPACTION_CONSTANTS.MIN_MESSAGES_TO_COMPACT;
+  const minRequiredMessages = isManual ? 2 : COMPACTION_CONSTANTS.MIN_MESSAGES_TO_COMPACT;
   if (history.length < minRequiredMessages) {
     return null;
   }
@@ -358,31 +376,72 @@ export async function runCompaction(
     return null;
   }
 
-  const userTurnCount = history.filter((m) => m.role === 'user').length;
-  const recentTurns = isManual
-    ? Math.min(2, Math.max(1, userTurnCount - 1))
-    : COMPACTION_CONSTANTS.DEFAULT_RECENT_TURNS;
-  const partition = partitionHistory(history, recentTurns, minRequiredMessages, isManual);
-  if (partition.messagesToCompact.length === 0) {
+  // Check if an existing compaction checkpoint can be incrementally extended
+  let uncompactedHistory = history;
+  let hasPreviousCompaction = false;
+  let previousSummary = latestCompaction?.summary || null;
+
+  if (latestCompaction) {
+    const lastCompactIdx = history.findIndex((m) => m.id === latestCompaction.last_compacted_message_id);
+    if (lastCompactIdx !== -1) {
+      if (lastCompactIdx >= history.length - 1) {
+        // Everything in history is already compacted
+        return isManual ? latestCompaction : null;
+      }
+      uncompactedHistory = history.slice(lastCompactIdx + 1);
+      hasPreviousCompaction = true;
+    }
+  }
+
+  const userTurnCount = uncompactedHistory.filter((m) => m.role === 'user').length;
+  if (hasPreviousCompaction && userTurnCount === 0 && !isManual) {
     return null;
+  }
+
+  const recentTurns = isManual
+    ? Math.min(1, Math.max(0, userTurnCount - 1))
+    : COMPACTION_CONSTANTS.DEFAULT_RECENT_TURNS;
+
+  const partition = partitionHistory(
+    uncompactedHistory,
+    recentTurns,
+    hasPreviousCompaction ? 2 : minRequiredMessages,
+    isManual
+  );
+
+  if (partition.messagesToCompact.length === 0) {
+    return isManual ? latestCompaction || null : null;
   }
 
   const firstMessageId = partition.messagesToCompact[0].id;
   const lastCompactedMessageId = partition.messagesToCompact[partition.messagesToCompact.length - 1].id;
 
-  const initialGoal = partition.initialGoalMessage?.content || null;
+  // Always anchor the session's true initial user goal
+  const initialGoalMessage = history.find((m) => m.role === 'user');
+  let initialGoal = initialGoalMessage?.content || null;
+  if (initialGoal && initialGoal.includes('data:image/')) {
+    initialGoal = initialGoal.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[^"'\s]+/g, '[Attached Image]');
+  }
 
   const summary = await generateCompactionSummary(
     partition.messagesToCompact,
-    latestCompaction?.summary,
+    previousSummary,
     initialGoal,
     session.model_id
   );
 
   const summaryTokens = estimateTokens(summary);
   const recentBufferTokens = estimateHistoryTokens(partition.recentBuffer);
-  const tokensAfter = summaryTokens + recentBufferTokens + (partition.initialGoalMessage ? estimateMessageTokens(partition.initialGoalMessage) : 0);
-  const tokensSaved = Math.max(0, partition.tokensBefore - tokensAfter);
+  const initialGoalTokens = initialGoalMessage ? estimateMessageTokens(initialGoalMessage) : 0;
+  const tokensAfter = summaryTokens + recentBufferTokens + initialGoalTokens;
+
+  // Calculate active tokens before this compaction
+  const activeTokensBefore = hasPreviousCompaction
+    ? estimateActiveSessionTokens(history, latestCompaction)
+    : partition.tokensBefore;
+
+  const deltaSaved = Math.max(0, activeTokensBefore - tokensAfter);
+  const cumulativeSaved = (latestCompaction?.tokens_saved || 0) + deltaSaved;
 
   const record: SessionCompactionRecord = {
     id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -390,9 +449,9 @@ export async function runCompaction(
     summary,
     first_message_id: firstMessageId,
     last_compacted_message_id: lastCompactedMessageId,
-    tokens_before: partition.tokensBefore,
+    tokens_before: activeTokensBefore,
     tokens_after: tokensAfter,
-    tokens_saved: tokensSaved,
+    tokens_saved: cumulativeSaved,
     created_at: Date.now(),
   };
 
