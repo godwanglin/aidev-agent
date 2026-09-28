@@ -375,7 +375,7 @@ export function renderContentWithChips(
   // Helper to render inline tokens ([gambar:id], __b64_img_0__, /slash, https://urls, @file)
   const renderInlineTokens = (subText: string, keyOffset: number): React.ReactNode[] => {
     // Note: URLs (https?://...) are explicitly tokenized FIRST so they never get sliced by file extension patterns
-    const tokenRegex = /(\[gambar:[a-zA-Z0-9_-]+\]|__b64_img_\d+__|\/(?:plan|test|review|browser|build|run|fix|audit|help|clear|skill:[a-zA-Z0-9_-]+)\b|https?:\/\/[^\s<>"'`()]+|@?[a-zA-Z0-9_\-./\\]+?\.[a-zA-Z0-9]+(?:(?:#L|:)\d+(?:-\d+)?)?|\.(?:gitignore|env(?:[\w.-]+)?|prettierrc|eslintrc|editorconfig))/g;
+    const tokenRegex = /(\[gambar:[a-zA-Z0-9_-]+\]|__b64_img_\d+__|\/(?:image|plan|test|review|browser|build|run|fix|audit|help|clear|skill:[a-zA-Z0-9_-]+)\b|https?:\/\/[^\s<>"'`()]+|@?[a-zA-Z0-9_\-./\\]+?\.[a-zA-Z0-9]+(?:(?:#L|:)\d+(?:-\d+)?)?|\.(?:gitignore|env(?:[\w.-]+)?|prettierrc|eslintrc|editorconfig))/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;

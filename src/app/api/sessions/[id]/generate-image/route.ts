@@ -68,14 +68,18 @@ export async function POST(
     // 4. Update session timestamp
     sessionRepo.update(id, { updated_at: Date.now() });
 
-    // 5. Broadcast events to refresh UI
+    // 5. Broadcast file changed so workspace tree & tabs refresh
+    if (result.relativePath) {
+      sessionEventBus.broadcast(id, {
+        type: 'file_changed',
+        data: { path: result.relativePath },
+      });
+    }
+
+    // 6. Broadcast done to trigger clean session refresh across clients
     sessionEventBus.broadcast(id, {
-      type: 'assistant_message_committed',
-      data: {
-        messageId: assistantMsgId,
-        content: finalContent,
-        sessionId: id,
-      },
+      type: 'done',
+      data: { sessionId: id },
     });
 
     sessionEventBus.broadcast('global', {
