@@ -23,6 +23,10 @@ export interface AidevSettings {
   projectLocalPermissions?: { fileRules: string[]; networkRules: string[]; terminalRules: string[] };
   autoDiscoverSkills?: boolean;
   verboseChat?: boolean;
+  telegramBotEnabled?: boolean;
+  telegramBotToken?: string;
+  telegramAllowedUserIds?: string;
+  telegramDefaultProjectId?: string;
 }
 
 export const DEFAULT_SETTINGS: AidevSettings = {
@@ -46,6 +50,10 @@ export const DEFAULT_SETTINGS: AidevSettings = {
   projectLocalPermissions: { fileRules: ['1'], networkRules: ['4'], terminalRules: ['6'] },
   autoDiscoverSkills: true,
   verboseChat: true,
+  telegramBotEnabled: false,
+  telegramBotToken: '',
+  telegramAllowedUserIds: '',
+  telegramDefaultProjectId: '',
 };
 
 export function getAidevHome(): string {

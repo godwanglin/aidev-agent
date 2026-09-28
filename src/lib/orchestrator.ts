@@ -60,7 +60,7 @@ export function parseInlineToolCalls(content: string): {
   if (toolCalls.length === 0) {
     const xmlToolRegex = /<(?:function_call|tool_call)>([\s\S]*?)<\/(?:function_call|tool_call)>/gi;
     while ((match = xmlToolRegex.exec(content)) !== null) {
-      const parsed = safeJsonParse(match[1].trim(), null);
+      const parsed = safeJsonParse<any>(match[1].trim(), null);
       if (parsed && typeof parsed === 'object') {
         const name = parsed.name || parsed.function || parsed.tool;
         const args = parsed.arguments || parsed.parameters || parsed.args || {};
@@ -79,7 +79,7 @@ export function parseInlineToolCalls(content: string): {
   if (toolCalls.length === 0) {
     const mdToolRegex = /```(?:tool_call|function_call)\s*\n([\s\S]*?)\n```/gi;
     while ((match = mdToolRegex.exec(content)) !== null) {
-      const parsed = safeJsonParse(match[1].trim(), null);
+      const parsed = safeJsonParse<any>(match[1].trim(), null);
       if (parsed && typeof parsed === 'object') {
         const name = parsed.name || parsed.function || parsed.tool;
         const args = parsed.arguments || parsed.parameters || parsed.args || {};
@@ -1377,7 +1377,7 @@ export class AgentOrchestrator {
       return;
     }
 
-    const parsedArgs = safeJsonParse(pendingMsg.tool_arguments || '{}', {});
+    const parsedArgs = safeJsonParse<any>(pendingMsg.tool_arguments || '{}', {});
     const toolName = pendingMsg.tool_name || '';
 
     // Extract userGoal and commandMode from recent message history
@@ -1936,8 +1936,8 @@ Directives:
 
     let activePlanContext = '';
     let activeWalkthroughContext = '';
+    const session = sessionRepo.getById(this.sessionId);
     try {
-      const session = sessionRepo.getById(this.sessionId);
       if (session) {
         const chatStorage = ensureChatStorageInitialized(session.project_id, this.sessionId);
         const planPath = path.join(chatStorage.artifacts, 'implementation_plan.md');
@@ -2100,7 +2100,7 @@ Directives:
         const item: any = { role: 'assistant', content: msg.content || null };
         if (msg.tool_arguments) {
           try {
-            const parsed = safeJsonParse(msg.tool_arguments, null);
+            const parsed = safeJsonParse<any>(msg.tool_arguments, null);
             if (Array.isArray(parsed) && parsed.length > 0) {
               item.tool_calls = parsed.map((tc: any) => ({
                 id: tc.id,
@@ -2177,9 +2177,9 @@ Directives:
                   if (!resolvedUrl.startsWith('data:')) {
                     let diskPath = p.file_path;
                     if (!diskPath || !fs.existsSync(diskPath)) {
-                      if (p.filename) {
+                      if (p.filename && session) {
                         try {
-                          const chatStorage = getChatStorage(session.project_id, this.sessionId);
+                          const chatStorage = ensureChatStorageInitialized(session.project_id, this.sessionId);
                           const cand = path.join(chatStorage.uploads, p.filename);
                           if (fs.existsSync(cand)) diskPath = cand;
                         } catch {}

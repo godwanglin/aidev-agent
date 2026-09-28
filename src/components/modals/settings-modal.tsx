@@ -35,6 +35,7 @@ import { PermissionsRulesModal, LocalPermissionsState, PermissionRuleCategory } 
 import { DirectoryPickerModal } from './directory-picker-modal';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { McpSettingsTab } from './mcp-settings-tab';
+import { TelegramSettingsTab } from './telegram-settings-tab';
 import { useConfirm } from '@/context/confirm-context';
 
 // Sleek iOS/Antigravity-styled compact toggle switch
@@ -286,6 +287,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     | 'mcp'
     | 'customizations'
     | 'browser'
+    | 'telegram'
     | `project_${string}`;
 
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
@@ -1184,7 +1186,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         customAlert({
           title: 'Skills Imported',
           message: `Successfully imported ${data.count} skills from GitHub collection!`,
-          variant: 'success',
+          variant: 'primary',
         });
       }
 
@@ -1432,6 +1434,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { key: 'mcp', label: 'MCP Servers' },
     { key: 'customizations', label: 'Customizations' },
     { key: 'browser', label: 'Browser' },
+    { key: 'telegram', label: 'Telegram Bot' },
   ];
 
   return (
@@ -3414,6 +3417,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* TAB: TELEGRAM BOT */}
+          {activeTab === 'telegram' && <TelegramSettingsTab projects={projects} />}
           </div>
         </main>
       </div>
