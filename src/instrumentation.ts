@@ -1,5 +1,9 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const g = globalThis as any;
+    if (g.__telegramBotBootstrapped) return;
+    g.__telegramBotBootstrapped = true;
+
     try {
       const { telegramBotManager } = await import('@/lib/telegram/telegram-service');
       const { loadSettings } = await import('@/lib/storage');

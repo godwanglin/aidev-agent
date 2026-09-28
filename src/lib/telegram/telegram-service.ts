@@ -50,6 +50,7 @@ function formatTimeAgo(timestamp: number): string {
 class TelegramBotManager {
   private bot: Bot | null = null;
   private isRunning: boolean = false;
+  private isStarting: boolean = false;
   private botUsername?: string;
   private botFirstName?: string;
   private lastStartedAt?: number;
@@ -247,7 +248,7 @@ class TelegramBotManager {
    * Starts the Telegram Bot long-polling daemon
    */
   public async start(): Promise<void> {
-    if (this.isRunning) {
+    if (this.isRunning || this.isStarting) {
       return;
     }
 
@@ -261,6 +262,16 @@ class TelegramBotManager {
       this.lastError = 'Token Telegram belum diisi di Settings.';
       this.log('warn', 'Gagal start: Telegram bot token belum diisi.');
       return;
+    }
+
+    this.isStarting = true;
+
+    // Clean up any lingering previous bot instance before creating a new one
+    if (this.bot) {
+      try {
+        await this.bot.stop();
+      } catch {}
+      this.bot = null;
     }
 
     try {
@@ -297,7 +308,7 @@ class TelegramBotManager {
 
       this.registerMiddlewaresAndHandlers(this.bot);
 
-      // Register catch handler so any unhandled error NEVER terminates the polling loop
+      // Register catch handler so any unhandled error inside update processing NEVER terminates the polling loop
       this.bot.catch((err) => {
         const errorMsg = err.error instanceof Error ? err.error.message : String(err.error || err);
         this.log('error', `Bot runtime error caught: ${errorMsg}`);
@@ -306,19 +317,35 @@ class TelegramBotManager {
 
       this.log('info', `Memulai background polling service untuk @${me.username}...`);
 
-      // Start long-polling in background
-      this.bot.start({
-        onStart: (info) => {
-          this.isRunning = true;
-          this.lastStartedAt = Date.now();
-          this.log('info', `🟢 Bot aktif & polling berjalan sebagai @${info.username} (${info.first_name})`);
-        },
-      });
+      // Start long-polling in background with robust rejection handler
+      this.bot
+        .start({
+          onStart: (info) => {
+            this.isRunning = true;
+            this.isStarting = false;
+            this.lastStartedAt = Date.now();
+            this.log('info', `🟢 Bot aktif & polling berjalan sebagai @${info.username} (${info.first_name})`);
+          },
+        })
+        .catch((err: any) => {
+          this.isRunning = false;
+          this.isStarting = false;
+          const errMsg = err?.message || String(err);
+          const isConflict = errMsg.includes('409') || errMsg.includes('terminated by other getUpdates');
+          if (isConflict) {
+            this.log('warn', `Polling Telegram dihentikan karena instance bot lain sedang berjalan (409 Conflict).`);
+          } else {
+            this.log('error', `Polling Telegram terhenti: ${errMsg}`);
+          }
+          this.lastError = errMsg;
+        });
 
       this.isRunning = true;
+      this.isStarting = false;
       this.lastStartedAt = Date.now();
     } catch (err: any) {
       this.isRunning = false;
+      this.isStarting = false;
       this.lastError = err?.message || 'Gagal memulai bot Telegram.';
       this.log('error', `Gagal memulai bot: ${this.lastError}`);
       console.error('[TelegramBot] Start error:', err);
@@ -329,14 +356,17 @@ class TelegramBotManager {
    * Stops the running Telegram Bot instance
    */
   public async stop(): Promise<void> {
-    if (!this.isRunning || !this.bot) {
+    this.isStarting = false;
+    if (!this.isRunning && !this.bot) {
       this.isRunning = false;
       return;
     }
 
     try {
       this.log('info', 'Menghentikan polling bot Telegram...');
-      await this.bot.stop();
+      if (this.bot) {
+        await this.bot.stop();
+      }
       this.log('info', '🔴 Bot Telegram berhasil dinonaktifkan.');
     } catch (err: any) {
       this.log('warn', `Peringatan saat menghentikan bot: ${err?.message || err}`);
@@ -344,6 +374,7 @@ class TelegramBotManager {
     } finally {
       this.bot = null;
       this.isRunning = false;
+      this.isStarting = false;
     }
   }
 
@@ -1078,4 +1109,11 @@ class TelegramBotManager {
   }
 }
 
-export const telegramBotManager = new TelegramBotManager();
+const globalForTelegram = globalThis as unknown as {
+  telegramBotManager?: TelegramBotManager;
+};
+
+export const telegramBotManager =
+  globalForTelegram.telegramBotManager || new TelegramBotManager();
+
+globalForTelegram.telegramBotManager = telegramBotManager;
