@@ -24,6 +24,7 @@ import {
 import type { GatewayModel, UserUsageData } from '@/lib/gateway';
 import { formatModelDisplayName } from '@/lib/model-utils';
 import { UsageCard } from './usage-card';
+import { ImageGenerateCard } from './image-generate-card';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 
 import { AestheticFileIcon } from '@/components/common/aesthetic-file-icon';
@@ -150,6 +151,7 @@ interface ChatInputProps {
   sessionId?: string | null;
   initialDraft?: string | null;
   onDraftChange?: (draft: string) => void;
+  onRefreshSession?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -172,6 +174,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   sessionId,
   initialDraft,
   onDraftChange,
+  onRefreshSession,
 }) => {
   const [isTaskBarExpanded, setIsTaskBarExpanded] = useState(true);
   const [showMentions, setShowMentions] = useState(false);
@@ -282,6 +285,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [showUsageCard, setShowUsageCard] = useState(false);
   const [usageData, setUsageData] = useState<UserUsageData | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
+
+  // Direct Image Generator card state (/image command)
+  const [showImageCard, setShowImageCard] = useState(false);
+  const [imageInitialPrompt, setImageInitialPrompt] = useState('');
 
   const handleFetchUsage = useCallback(async () => {
     setIsLoadingUsage(true);
@@ -741,6 +748,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       scope?: string;
     }> = [
       { cmd: '/usage', chipValue: '/usage', desc: 'View tier plan quota and credit usage' },
+      { cmd: '/image', chipValue: '/image', desc: 'Directly generate images with model & ratio selector' },
       { cmd: '/plan', chipValue: '/plan', desc: 'Create structured implementation plan before modifying files' },
       { cmd: '/test', chipValue: '/test', desc: 'Run automated project test suites' },
       { cmd: '/review', chipValue: '/review', desc: 'Inspect diffs and audit changes' },
@@ -1230,6 +1238,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const insertSlash = (command: string) => {
+    // If command is /image, open Image Generator Card directly without creating a chip
+    if (command === '/image') {
+      setShowSlashCommands(false);
+      setSlashQuery('');
+      if (editorRef.current) {
+        editorRef.current.innerHTML = '';
+      }
+      setIsEmpty(true);
+      setChips([]);
+      setImageInitialPrompt('');
+      setShowImageCard(true);
+      return;
+    }
+
     // If command is /usage, trigger usage fetching and display usage card without creating a chip
     if (command === '/usage') {
       setShowSlashCommands(false);
@@ -1399,6 +1421,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setShowSlashCommands(false);
     setIsEmpty(true);
     clearSessionDraft();
+
+    // Direct /image prompt submission
+    if (prompt.trim().startsWith('/image')) {
+      const cleanPrompt = prompt.trim().replace(/^\/image\s*/, '').trim();
+      setImageInitialPrompt(cleanPrompt);
+      setShowImageCard(true);
+      return;
+    }
 
     // Direct /usage prompt submission
     if (prompt.trim() === '/usage') {
@@ -1574,6 +1604,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onClose={() => setShowUsageCard(false)}
             onRefresh={handleFetchUsage}
             isLoading={isLoadingUsage}
+          />
+        )}
+
+        {/* Direct Image Generator Card (renders right above input dock when triggered via /image) */}
+        {showImageCard && sessionId && (
+          <ImageGenerateCard
+            sessionId={sessionId}
+            initialPrompt={imageInitialPrompt}
+            onClose={() => {
+              setShowImageCard(false);
+              setImageInitialPrompt('');
+            }}
+            onSuccess={() => {
+              setShowImageCard(false);
+              setImageInitialPrompt('');
+              onRefreshSession?.();
+            }}
           />
         )}
 

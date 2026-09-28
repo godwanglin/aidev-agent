@@ -91,6 +91,7 @@ interface ChatWorkspaceProps {
   sessionId?: string | null;
   sessionDraft?: string | null;
   onDraftChange?: (draft: string) => void;
+  onRefreshSession?: () => void;
 }
 
 export interface TurnSegment {
@@ -197,6 +198,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   sessionId,
   sessionDraft,
   onDraftChange,
+  onRefreshSession,
 }) => {
   const { chatWidthClass } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -625,6 +627,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 sessionId={sessionId || messages[0]?.session_id || null}
                 initialDraft={sessionDraft}
                 onDraftChange={onDraftChange}
+                onRefreshSession={onRefreshSession}
               />
             </div>
           </div>
@@ -1218,6 +1221,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             sessionId={sessionId || messages[0]?.session_id || null}
             initialDraft={sessionDraft}
             onDraftChange={onDraftChange}
+            onRefreshSession={onRefreshSession}
           />
         </div>
       )}

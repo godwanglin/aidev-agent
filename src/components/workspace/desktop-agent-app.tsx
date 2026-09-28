@@ -4506,6 +4506,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenBrowser={handleOpenBrowserTab}
                 onOpenReview={handleOpenReview}
                 onSendMessage={handleSendMessage}
+                onRefreshSession={() => refreshSessionData({ forceMessages: true })}
                 sessionId={currentSession?.id || null}
                 sessionDraft={currentSession?.draft_prompt || null}
                 onDraftChange={(draftVal) => {
@@ -4617,6 +4618,16 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
                 onOpenFile={openFileTab}
                 onOpenBrowser={handleOpenBrowserTab}
                 onSendMessage={handleSendSplitMessage}
+                onRefreshSession={() => {
+                  if (splitSession?.id) {
+                    fetch(`/api/sessions/${splitSession.id}`)
+                      .then((r) => r.json())
+                      .then((d) => {
+                        if (d.messages) setSplitMessages(d.messages);
+                      })
+                      .catch(() => {});
+                  }
+                }}
                 sessionId={splitSession?.id || null}
                 sessionDraft={splitSession?.draft_prompt || null}
                 onContinueTurn={(errId) => {

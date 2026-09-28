@@ -177,7 +177,7 @@ export function parseFilePathInfo(str: string, isFromCodeTag = false): {
 
 export function isSlashCommand(str: string): boolean {
   const trimmed = str.trim();
-  return /^\/(plan|test|review|browser|build|run|fix|audit|help|clear|skill:[a-zA-Z0-9_-]+)$/i.test(trimmed);
+  return /^\/(image|plan|test|review|browser|build|run|fix|audit|help|clear|skill:[a-zA-Z0-9_-]+)$/i.test(trimmed);
 }
 
 export function formatMessageTimestamp(timestamp?: number | string | null): string {

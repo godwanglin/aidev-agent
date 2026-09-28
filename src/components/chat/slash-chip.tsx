@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Zap, Terminal, Search, Play, X, Globe, Layers } from 'lucide-react';
+import { Zap, Terminal, Search, Play, X, Globe, Layers, Image as ImageIcon } from 'lucide-react';
 
 interface SlashChipProps {
   command: string;
@@ -13,6 +13,12 @@ export const SlashChip: React.FC<SlashChipProps> = ({ command, onClick, onDelete
   const cleanCmd = command.trim();
 
   const getStyle = () => {
+    if (cleanCmd.startsWith('/image')) {
+      return {
+        bg: 'bg-[#291738] hover:bg-[#351e49] border-[#5e2b82] text-[#d8b4fe]',
+        icon: <ImageIcon className="w-3 h-3 text-[#c084fc] shrink-0" />,
+      };
+    }
     if (cleanCmd.startsWith('/skill:')) {
       return {
         bg: 'bg-[#1c1c20] hover:bg-[#25252b] border-[#32323a] text-[#d4d4d8]',

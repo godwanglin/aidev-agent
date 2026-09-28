@@ -28,11 +28,35 @@ export interface TelegramBotStatus {
   lastError?: string;
 }
 
+export interface PendingTelegramQuestion {
+  toolCallId: string;
+  messageId: string;
+  question: string;
+  options: string[];
+  allowCustom: boolean;
+  telegramMessageId?: number;
+}
+
+export interface PendingTelegramPermission {
+  toolCallId: string;
+  messageId: string;
+  toolName: string;
+  arguments: any;
+  actionType: string;
+  targetResource: string;
+  reason?: string;
+  mode: string;
+  telegramMessageId?: number;
+}
+
 interface UserState {
   currentProjectId?: string;
   currentSessionId?: string;
   isCmdMode?: boolean;
   trackedMessageIds?: number[];
+  pendingQuestion?: PendingTelegramQuestion;
+  pendingPermission?: PendingTelegramPermission;
+  isAwaitingCustomAnswer?: boolean;
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -612,6 +636,127 @@ class TelegramBotManager {
           `Sekarang menggunakan model: \`${modelId}\``,
           { parse_mode: 'Markdown' }
         );
+      } else if (data.startsWith('q_opt:')) {
+        const optIndex = parseInt(data.replace('q_opt:', ''), 10);
+        let qInfo = state.pendingQuestion;
+
+        // Fallback: check db if state was lost/restarted
+        if (!qInfo && state.currentSessionId) {
+          const msgs = messageRepo.listBySession(state.currentSessionId);
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.status === 'PENDING_QUESTION') {
+            let parsedArgs: any = {};
+            try { parsedArgs = JSON.parse(lastMsg.tool_arguments || '{}'); } catch {}
+            qInfo = {
+              toolCallId: lastMsg.tool_call_id || '',
+              messageId: lastMsg.id,
+              question: parsedArgs.question || '',
+              options: Array.isArray(parsedArgs.options) ? parsedArgs.options : [],
+              allowCustom: parsedArgs.allowCustom !== false,
+            };
+          }
+        }
+
+        if (!qInfo) {
+          await ctx.answerCallbackQuery({ text: 'Pertanyaan sudah kedaluwarsa atau sudah dijawab.' });
+          return;
+        }
+
+        const selectedOption = qInfo.options[optIndex] || `Pilihan ${optIndex + 1}`;
+        const toolCallId = qInfo.toolCallId;
+        state.pendingQuestion = undefined;
+        state.isAwaitingCustomAnswer = false;
+
+        await ctx.answerCallbackQuery({ text: `Dipilih: ${selectedOption.slice(0, 30)}` });
+        this.log('info', `User ${userId} memilih jawaban pertanyaan [${optIndex}]: "${selectedOption}"`);
+
+        try {
+          await ctx.editMessageText(
+            `✅ *Pertanyaan Dijawab:*\n` +
+            `*Pertanyaan:* _${qInfo.question}_\n` +
+            `*Pilihan:* ${selectedOption}\n\n` +
+            `⏳ _Melanjutkan eksekusi agent..._`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch {}
+
+        await this.executeQuestionAnswer(ctx, state, toolCallId, selectedOption);
+      } else if (data === 'q_custom') {
+        state.isAwaitingCustomAnswer = true;
+        await ctx.answerCallbackQuery({ text: 'Ketik jawaban Anda di chat.' });
+        const promptMsg = await ctx.reply(
+          `✍️ *Ketik Jawaban Custom:*\n\n` +
+          `Silakan ketik dan kirim pesan teks biasa sekarang untuk menjawab pertanyaan AI di atas.`,
+          { parse_mode: 'Markdown' }
+        );
+        if (promptMsg?.message_id) {
+          this.trackMsgId(state, promptMsg.message_id);
+        }
+      } else if (data === 'q_cancel') {
+        const qInfo = state.pendingQuestion;
+        state.pendingQuestion = undefined;
+        state.isAwaitingCustomAnswer = false;
+        await ctx.answerCallbackQuery({ text: 'Pertanyaan dibatalkan.' });
+        try {
+          await ctx.editMessageText('❌ *Pertanyaan dibatalkan oleh user.*', { parse_mode: 'Markdown' });
+        } catch {}
+
+        if (qInfo?.toolCallId && state.currentSessionId && state.currentProjectId) {
+          const project = projectRepo.getById(state.currentProjectId);
+          const orchestrator = new AgentOrchestrator(state.currentSessionId, project?.workdir_path || process.cwd(), () => {});
+          await orchestrator.cancelQuestion(qInfo.toolCallId).catch(() => {});
+        }
+      } else if (data.startsWith('perm:')) {
+        let permInfo = state.pendingPermission;
+
+        // Fallback: check db if state was lost
+        if (!permInfo && state.currentSessionId) {
+          const msgs = messageRepo.listBySession(state.currentSessionId);
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.status === 'PENDING_PERMISSION') {
+            let parsedArgs: any = {};
+            try { parsedArgs = JSON.parse(lastMsg.tool_arguments || '{}'); } catch {}
+            permInfo = {
+              toolCallId: lastMsg.tool_call_id || '',
+              messageId: lastMsg.id,
+              toolName: lastMsg.tool_name || '',
+              arguments: parsedArgs,
+              actionType: 'COMMAND',
+              targetResource: '',
+              mode: 'ASK',
+            };
+          }
+        }
+
+        if (!permInfo) {
+          await ctx.answerCallbackQuery({ text: 'Permintaan izin sudah kedaluwarsa.' });
+          return;
+        }
+
+        const decision = data === 'perm:deny' ? 'REJECTED' : 'APPROVED';
+        const alwaysAllow = data === 'perm:always';
+        const toolCallId = permInfo.toolCallId;
+        const toolName = permInfo.toolName;
+        state.pendingPermission = undefined;
+
+        await ctx.answerCallbackQuery({
+          text: decision === 'APPROVED' ? 'Izin diberikan!' : 'Izin ditolak.',
+        });
+        this.log('info', `User ${userId} memberikan izin [${decision}, always: ${alwaysAllow}] untuk ${toolName}`);
+
+        try {
+          await ctx.editMessageText(
+            decision === 'APPROVED'
+              ? `✅ *Izin Diberikan (${alwaysAllow ? 'Selalu' : 'Sekali'}):* \`${toolName}\`\n\n⏳ _Melanjutkan eksekusi agent..._`
+              : `❌ *Izin Ditolak:* \`${toolName}\`\n\n⏳ _Melanjutkan eksekusi agent..._`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch {}
+
+        await this.executePermissionDecision(ctx, state, toolCallId, decision, alwaysAllow);
+      } else if (data === 'exec_plan') {
+        await ctx.answerCallbackQuery({ text: 'Menjalankan rencana...' });
+        await this.executeAgentTurn(ctx, 'Lanjutkan dan eksekusi implementation plan yang telah dibuat langkah demi langkah.');
       }
     });
 
@@ -737,10 +882,29 @@ class TelegramBotManager {
     // 9. Command /stop & /cancel
     bot.command(['stop', 'cancel'], async (ctx) => {
       const state = this.getUserState(ctx.from!.id);
+      let stoppedAnything = false;
+
+      if (state.pendingQuestion) {
+        const qToolCallId = state.pendingQuestion.toolCallId;
+        state.pendingQuestion = undefined;
+        state.isAwaitingCustomAnswer = false;
+        stoppedAnything = true;
+        if (state.currentSessionId && state.currentProjectId) {
+          const project = projectRepo.getById(state.currentProjectId);
+          const orchestrator = new AgentOrchestrator(state.currentSessionId, project?.workdir_path || process.cwd(), () => {});
+          await orchestrator.cancelQuestion(qToolCallId).catch(() => {});
+        }
+      }
+
+      state.pendingPermission = undefined;
+
       if (state.currentSessionId && isSessionOrchestratorRunning(state.currentSessionId)) {
         abortSessionOrchestrator(state.currentSessionId);
+        stoppedAnything = true;
         this.log('warn', `User ${ctx.from!.id} membatalkan turn aktif di session ${state.currentSessionId}`);
         await ctx.reply('🛑 *Eksekusi turn agent berhasil dihentikan!*', { parse_mode: 'Markdown' });
+      } else if (stoppedAnything) {
+        await ctx.reply('🛑 *Pertanyaan/konfirmasi agent berhasil dibatalkan.*', { parse_mode: 'Markdown' });
       } else {
         await ctx.reply('ℹ️ Tidak ada proses agent yang sedang berjalan.');
       }
@@ -937,27 +1101,112 @@ class TelegramBotManager {
         return;
       }
 
+      // Check if user is answering a pending clarification question
+      if (!state.pendingQuestion && state.currentSessionId) {
+        const msgs = messageRepo.listBySession(state.currentSessionId);
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.status === 'PENDING_QUESTION') {
+          let parsedArgs: any = {};
+          try {
+            parsedArgs = JSON.parse(lastMsg.tool_arguments || '{}');
+          } catch {}
+          state.pendingQuestion = {
+            toolCallId: lastMsg.tool_call_id || '',
+            messageId: lastMsg.id,
+            question: parsedArgs.question || 'Pilih salah satu opsi:',
+            options: Array.isArray(parsedArgs.options) ? parsedArgs.options : [],
+            allowCustom: parsedArgs.allowCustom !== false,
+          };
+        }
+      }
+
+      if (state.pendingQuestion) {
+        const qInfo = state.pendingQuestion;
+        state.pendingQuestion = undefined;
+        state.isAwaitingCustomAnswer = false;
+
+        this.log('info', `User ${ctx.from.id} menjawab pertanyaan AI: "${text}"`);
+        let confirmMsg: any = null;
+        try {
+          confirmMsg = await ctx.reply(
+            `✍️ *Jawaban Diterima:*\n> ${text}\n\n⏳ _Melanjutkan eksekusi agent..._`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch {
+          confirmMsg = await ctx.reply(`Jawaban diterima: ${text}\n\nMelanjutkan eksekusi agent...`);
+        }
+        if (confirmMsg?.message_id) {
+          this.trackMsgId(state, confirmMsg.message_id);
+        }
+
+        await this.executeQuestionAnswer(ctx, state, qInfo.toolCallId, text);
+        return;
+      }
+
       // Normal Agent Mode
       await this.executeAgentTurn(ctx, text);
     });
   }
 
   /**
-   * Executes an AI Agent turn with Two-Bubble Streaming Architecture
+   * Executes an AI Agent turn with promptText
    */
-  private async executeAgentTurn(ctx: any, promptText: string): Promise<void> {
+  public async executeAgentTurn(ctx: any, promptText: string): Promise<void> {
     const state = this.getUserState(ctx.from.id);
+    await this.runAgentExecution(ctx, state, `Turn: "${promptText.slice(0, 40)}"`, (orchestrator) =>
+      orchestrator.runTurn(promptText)
+    );
+  }
+
+  /**
+   * Resumes an AI Agent execution after user answers a clarification question
+   */
+  public async executeQuestionAnswer(
+    ctx: any,
+    state: UserState,
+    toolCallId: string,
+    answer: string
+  ): Promise<void> {
+    await this.runAgentExecution(ctx, state, `Answer: "${answer.slice(0, 40)}"`, (orchestrator) =>
+      orchestrator.resumeWithAnswer(toolCallId, answer)
+    );
+  }
+
+  /**
+   * Resumes an AI Agent execution after user decides on a tool permission
+   */
+  public async executePermissionDecision(
+    ctx: any,
+    state: UserState,
+    toolCallId: string,
+    decision: 'APPROVED' | 'REJECTED',
+    alwaysAllow: boolean
+  ): Promise<void> {
+    await this.runAgentExecution(ctx, state, `Permission: ${decision}`, (orchestrator) =>
+      orchestrator.resumeWithPermission(toolCallId, decision, alwaysAllow)
+    );
+  }
+
+  /**
+   * Core execution runner for Turns, Answers, and Permissions with Two-Bubble Streaming
+   */
+  private async runAgentExecution(
+    ctx: any,
+    state: UserState,
+    actionDescription: string,
+    action: (orchestrator: AgentOrchestrator) => Promise<void>
+  ): Promise<void> {
     const project = state.currentProjectId ? projectRepo.getById(state.currentProjectId) : null;
     const workdir = project ? project.workdir_path : process.cwd();
 
     if (!state.currentSessionId) {
-      this.log('warn', `User ${ctx.from.id} mengirim instruksi tapi sesi belum aktif`);
+      this.log('warn', `User ${ctx.from.id} menjalankan agent tapi sesi belum aktif`);
       await ctx.reply('Sesi belum siap. Ketik /new untuk memulai.');
       return;
     }
 
     const sessionId = state.currentSessionId;
-    this.log('info', `Memulai Agent Turn di session ${sessionId}: "${promptText.slice(0, 60)}"`);
+    this.log('info', `Memulai Agent Execution di session ${sessionId}: ${actionDescription}`);
 
     const activities: string[] = [];
     let isThinking = true;
@@ -965,6 +1214,9 @@ class TelegramBotManager {
     let pendingEditTimer: any = null;
     let finalContent = '';
     const generatedImagePaths: string[] = [];
+    let questionData: any = null;
+    let permissionData: any = null;
+    let planData: any = null;
 
     // Create BUBBLE 1: Live Status & Activity Tracker
     const bubble1Msg = await ctx.reply(
@@ -977,7 +1229,6 @@ class TelegramBotManager {
 
     const updateBubble1 = async (force: boolean = false) => {
       const now = Date.now();
-      // Respect Telegram edit message rate-limit (1 per second)
       if (!force && now - lastEditTime < 1100) {
         if (!pendingEditTimer) {
           pendingEditTimer = setTimeout(() => {
@@ -1038,18 +1289,63 @@ class TelegramBotManager {
       } else if (event.type === 'content_delta') {
         isThinking = false;
         finalContent += event.data?.delta || '';
+      } else if (event.type === 'question_required') {
+        questionData = event.data;
+      } else if (event.type === 'permission_required') {
+        permissionData = event.data;
+      } else if (event.type === 'plan_created') {
+        planData = event.data;
       }
     };
 
     try {
       const orchestrator = new AgentOrchestrator(sessionId, workdir, sendEvent);
-      await orchestrator.runTurn(promptText);
+      await action(orchestrator);
 
-      // Finalize BUBBLE 1
       if (pendingEditTimer) clearTimeout(pendingEditTimer);
       const durationSec = ((Date.now() - (bubble1Msg.date * 1000)) / 1000).toFixed(1);
-      this.log('info', `Agent turn selesai (${activities.length} tools dalam ${durationSec}s)`);
 
+      // 1. Check if execution stopped waiting for user clarification question
+      if (questionData) {
+        this.log('info', `Agent turn butuh klarifikasi user: "${questionData.question}"`);
+        try {
+          await ctx.api.editMessageText(
+            ctx.chat.id,
+            bubble1Msg.message_id,
+            `❓ *Klarifikasi Diperlukan* (${activities.length} tools dijalankan dalam ${durationSec}s)`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch {}
+
+        if (finalContent.trim()) {
+          try {
+            const preMsg = await ctx.reply(finalContent.trim(), { parse_mode: 'Markdown' });
+            if (preMsg?.message_id) this.trackMsgId(state, preMsg.message_id);
+          } catch {}
+        }
+
+        await this.sendQuestionCard(ctx, state, questionData);
+        return;
+      }
+
+      // 2. Check if execution stopped waiting for user permission
+      if (permissionData) {
+        this.log('info', `Agent turn butuh izin user: "${permissionData.toolName}"`);
+        try {
+          await ctx.api.editMessageText(
+            ctx.chat.id,
+            bubble1Msg.message_id,
+            `🛡️ *Menunggu Izin User* (${activities.length} tools dijalankan dalam ${durationSec}s)`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch {}
+
+        await this.sendPermissionCard(ctx, state, permissionData);
+        return;
+      }
+
+      // 3. Normal Completion
+      this.log('info', `Agent turn selesai (${activities.length} tools dalam ${durationSec}s)`);
       try {
         await ctx.api.editMessageText(
           ctx.chat.id,
@@ -1066,16 +1362,26 @@ class TelegramBotManager {
         finalContent = lastMsg?.content || 'Operasi berhasil diselesaikan.';
       }
 
+      // If plan was created, attach quick execute button
+      const replyMarkup = planData
+        ? new InlineKeyboard().text('🚀 Eksekusi Rencana', 'exec_plan')
+        : undefined;
+
       // Split long messages if exceeding Telegram 4000 char boundary
       const chunkSize = 3900;
       for (let i = 0; i < finalContent.length; i += chunkSize) {
+        const isLastChunk = i + chunkSize >= finalContent.length;
         const chunk = finalContent.slice(i, i + chunkSize);
         let chunkMsg: any = null;
         try {
-          chunkMsg = await ctx.reply(chunk, { parse_mode: 'Markdown' });
+          chunkMsg = await ctx.reply(chunk, {
+            parse_mode: 'Markdown',
+            reply_markup: isLastChunk ? replyMarkup : undefined,
+          });
         } catch {
-          // Fallback without parse_mode if invalid markdown tokens
-          chunkMsg = await ctx.reply(chunk);
+          chunkMsg = await ctx.reply(chunk, {
+            reply_markup: isLastChunk ? replyMarkup : undefined,
+          });
         }
         if (chunkMsg?.message_id) {
           this.trackMsgId(state, chunkMsg.message_id);
@@ -1105,6 +1411,146 @@ class TelegramBotManager {
           { parse_mode: 'Markdown' }
         );
       } catch {}
+    }
+  }
+
+  /**
+   * Sends an interactive question card with inline buttons for each option + custom answer
+   */
+  private async sendQuestionCard(
+    ctx: any,
+    state: UserState,
+    questionData: {
+      toolCallId: string;
+      messageId: string;
+      question: string;
+      options: string[];
+      allowCustom: boolean;
+    }
+  ): Promise<void> {
+    state.pendingQuestion = {
+      toolCallId: questionData.toolCallId,
+      messageId: questionData.messageId,
+      question: questionData.question,
+      options: questionData.options,
+      allowCustom: questionData.allowCustom !== false,
+    };
+    state.pendingPermission = undefined;
+    state.isAwaitingCustomAnswer = false;
+
+    let text = `❓ *Klarifikasi Diperlukan:*\n\n`;
+    text += `*${questionData.question}*\n\n`;
+    if (questionData.options && questionData.options.length > 0) {
+      text += `*Pilihan Jawaban:*\n`;
+      questionData.options.forEach((opt, idx) => {
+        const isRec = idx === 0 ? ' _(Recommended)_' : '';
+        text += `*${idx + 1}.* ${opt}${isRec}\n`;
+      });
+    }
+    text += `\n_💡 Klik tombol di bawah untuk memilih, atau ketik langsung jawaban custom Anda di chat._`;
+
+    const keyboard = new InlineKeyboard();
+    if (questionData.options && questionData.options.length > 0) {
+      questionData.options.forEach((opt, idx) => {
+        let label = `${idx + 1}. ${opt}`;
+        if (label.length > 38) {
+          label = label.slice(0, 35) + '...';
+        }
+        keyboard.text(label, `q_opt:${idx}`).row();
+      });
+    }
+    if (questionData.allowCustom !== false) {
+      keyboard.text('✍️ Ketik Custom Answer', 'q_custom');
+    }
+    keyboard.text('❌ Batal', 'q_cancel');
+
+    try {
+      const qMsg = await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+      if (qMsg?.message_id) {
+        state.pendingQuestion.telegramMessageId = qMsg.message_id;
+        this.trackMsgId(state, qMsg.message_id);
+      }
+    } catch {
+      const plainText =
+        `❓ Klarifikasi Diperlukan:\n\n${questionData.question}\n\n` +
+        questionData.options.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n') +
+        `\n\nKlik tombol di bawah atau ketik langsung pesan Anda:`;
+      const qMsg = await ctx.reply(plainText, {
+        reply_markup: keyboard,
+      });
+      if (qMsg?.message_id) {
+        state.pendingQuestion.telegramMessageId = qMsg.message_id;
+        this.trackMsgId(state, qMsg.message_id);
+      }
+    }
+  }
+
+  /**
+   * Sends a permission request card with inline buttons
+   */
+  private async sendPermissionCard(
+    ctx: any,
+    state: UserState,
+    permData: {
+      toolCallId: string;
+      messageId: string;
+      toolName: string;
+      arguments: any;
+      actionType: string;
+      targetResource: string;
+      reason?: string;
+      mode: string;
+    }
+  ): Promise<void> {
+    state.pendingPermission = {
+      toolCallId: permData.toolCallId,
+      messageId: permData.messageId,
+      toolName: permData.toolName,
+      arguments: permData.arguments,
+      actionType: permData.actionType,
+      targetResource: permData.targetResource,
+      reason: permData.reason,
+      mode: permData.mode,
+    };
+    state.pendingQuestion = undefined;
+
+    let text = `🛡️ *Konfirmasi Eksekusi Tool Diperlukan:*\n\n`;
+    text += `🔧 *Tool:* \`${permData.toolName}\`\n`;
+    if (permData.targetResource) {
+      text += `🎯 *Target:* \`${permData.targetResource}\`\n`;
+    }
+    if (permData.reason) {
+      text += `ℹ️ *Alasan:* ${permData.reason}\n`;
+    }
+    text += `\n_Pilih tindakan untuk mengizinkan atau menolak eksekusi:_`;
+
+    const keyboard = new InlineKeyboard()
+      .text('✅ Izinkan Sekali', 'perm:allow')
+      .text('⚡ Izinkan Selalu', 'perm:always')
+      .row()
+      .text('❌ Tolak Eksekusi', 'perm:deny');
+
+    try {
+      const pMsg = await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+      if (pMsg?.message_id) {
+        state.pendingPermission.telegramMessageId = pMsg.message_id;
+        this.trackMsgId(state, pMsg.message_id);
+      }
+    } catch {
+      const pMsg = await ctx.reply(
+        `🛡️ Konfirmasi Eksekusi Tool:\nTool: ${permData.toolName}\nTarget: ${permData.targetResource || '-'}\n\nPilih tindakan:`,
+        { reply_markup: keyboard }
+      );
+      if (pMsg?.message_id) {
+        state.pendingPermission.telegramMessageId = pMsg.message_id;
+        this.trackMsgId(state, pMsg.message_id);
+      }
     }
   }
 }
