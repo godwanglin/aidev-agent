@@ -27,6 +27,7 @@ export interface AidevSettings {
   telegramBotToken?: string;
   telegramAllowedUserIds?: string;
   telegramDefaultProjectId?: string;
+  defaultImageModel?: string;
 }
 
 export const DEFAULT_SETTINGS: AidevSettings = {
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: AidevSettings = {
   telegramBotToken: '',
   telegramAllowedUserIds: '',
   telegramDefaultProjectId: '',
+  defaultImageModel: 'gpt-image-2.5',
 };
 
 export function getAidevHome(): string {
@@ -138,6 +140,7 @@ export function getStoragePaths() {
     commandsLog: path.join(root, 'logs', 'commands.log'),
     cache: path.join(root, 'cache'),
     modelsCache: path.join(root, 'cache', 'models.json'),
+    imageModelsCache: path.join(root, 'cache', 'image-models.json'),
     tasks: path.join(root, 'tasks'),
   };
 }

@@ -11,6 +11,8 @@ export interface GatewayModel {
   created?: number;
   releaseDate?: string;
   isNew?: boolean;
+  type?: string;
+  cost_per_image?: number;
   context_length?: number;
   max_completion_tokens?: number;
   eligible?: boolean;
@@ -344,17 +346,20 @@ export async function getAvailableModels(forceRefresh = false): Promise<GatewayM
     try {
       const eligData = await getUserEligibility();
       if (eligData && Array.isArray(eligData.models) && eligData.models.length > 0) {
-        const models: GatewayModel[] = eligData.models.map((m: any) => ({
-          id: m.id,
-          name: formatModelDisplayName(m.id, m.name),
-          owned_by: m.owned_by,
-          eligible: m.eligible !== false,
-          minTier: m.minTier || 'FREE',
-          minTierName: m.minTierName || 'Free',
-          minTierBadgeColor: m.minTierBadgeColor || 'gray',
-          reason: m.reason,
-          context_length: getModelContextWindow(m.id),
-        }));
+        const models: GatewayModel[] = eligData.models
+          .filter((m: any) => m.type !== 'image' && isGenerativeChatModel(m.id))
+          .map((m: any) => ({
+            id: m.id,
+            name: formatModelDisplayName(m.id, m.name),
+            type: m.type || 'chat',
+            owned_by: m.owned_by,
+            eligible: m.eligible !== false,
+            minTier: m.minTier || 'FREE',
+            minTierName: m.minTierName || 'Free',
+            minTierBadgeColor: m.minTierBadgeColor || 'gray',
+            reason: m.reason,
+            context_length: getModelContextWindow(m.id),
+          }));
 
         const cacheEntry: ModelCacheEntry = {
           timestamp: Date.now(),
@@ -513,3 +518,110 @@ export function getModelContextWindow(modelId: string): number {
 
   return 128000;
 }
+
+/**
+ * Checks if a model ID or type denotes an image generation model.
+ */
+export function isImageModel(id: string, type?: string): boolean {
+  if (type === 'image') return true;
+  const lower = id.toLowerCase();
+  return (
+    lower.includes('image') ||
+    lower.includes('dall-e') ||
+    lower.includes('flux') ||
+    lower.includes('midjourney') ||
+    lower.includes('sdxl') ||
+    lower.includes('stable-diffusion')
+  );
+}
+
+/**
+ * Dynamically fetches active and public image generation models from Aidev AI Gateway (/v1/models?type=image).
+ * Caches results to $USERPROFILE/.aidev/cache/image-models.json with a 5-minute TTL.
+ */
+export async function getAvailableImageModels(forceRefresh = false): Promise<GatewayModel[]> {
+  ensureStorageInitialized();
+  const { imageModelsCache } = getStoragePaths();
+
+  if (!forceRefresh && fs.existsSync(imageModelsCache)) {
+    try {
+      const raw = fs.readFileSync(imageModelsCache, 'utf-8');
+      const cache: ModelCacheEntry = JSON.parse(raw);
+      if (Date.now() - cache.timestamp < CACHE_TTL_MS && cache.models.length > 0) {
+        return cache.models;
+      }
+    } catch {
+      // Fall through to live fetch
+    }
+  }
+
+  const settings = loadSettings();
+  const isAidevGateway =
+    !settings.gatewayUrl ||
+    settings.gatewayUrl.includes('localhost:3000') ||
+    settings.gatewayUrl.includes('127.0.0.1:3000') ||
+    settings.gatewayUrl.includes('aidev') ||
+    settings.gatewayUrl.includes('weebinhub');
+
+  const rawKey = settings.apiKey || process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444';
+  const baseUrl = settings.gatewayUrl.replace(/\/+$/, '');
+  const imageModels: GatewayModel[] = [];
+
+  if (isAidevGateway) {
+    try {
+      const res = await fetch(`${baseUrl}/models?type=image`, {
+        headers: {
+          Authorization: `Bearer ${rawKey}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
+        for (const item of list) {
+          if (item.type === 'image' || isImageModel(item.id, item.type)) {
+            imageModels.push({
+              id: item.id,
+              name: item.display_name || item.name || item.id,
+              type: 'image',
+              owned_by: item.owned_by || 'system',
+              cost_per_image: item.cost_per_image ?? 500,
+              eligible: item.eligible !== false,
+              capabilities: item.capabilities,
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Gateway] Failed to fetch image models from /v1/models?type=image:', err?.message || err);
+    }
+  }
+
+  // Fallback defaults if none returned or gateway offline
+  if (imageModels.length === 0) {
+    imageModels.push({
+      id: 'gpt-image-2.5',
+      name: 'GPT Image 2.5 HD',
+      type: 'image',
+      owned_by: 'openai',
+      cost_per_image: 500,
+      eligible: true,
+      capabilities: {
+        chat: false,
+        image_generation: true,
+      },
+    });
+  }
+
+  const cacheEntry: ModelCacheEntry = {
+    timestamp: Date.now(),
+    models: imageModels,
+  };
+  try {
+    fs.writeFileSync(imageModelsCache, JSON.stringify(cacheEntry, null, 2), 'utf-8');
+  } catch {}
+
+  return imageModels;
+}
+

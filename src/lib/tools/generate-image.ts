@@ -3,7 +3,7 @@ import path from 'path';
 import { sanitizeAndResolvePath } from '../security';
 import { getOpenAIClient } from '../gateway';
 import { sessionRepo } from '../db';
-import { ensureChatStorageInitialized } from '../storage';
+import { ensureChatStorageInitialized, loadSettings } from '../storage';
 
 export interface GenerateImageParams {
   prompt: string;
@@ -93,14 +93,17 @@ export async function executeGenerateImage(
   try {
     const client = getOpenAIClient();
     const sizeStr = `${width}x${height}` as any;
+    const settings = loadSettings();
+    const requestedImageModel = params.model || settings.defaultImageModel || 'gpt-image-2.5';
     const response = await client.images.generate(
       {
+        model: requestedImageModel,
         prompt,
         n: 1,
         size: sizeStr,
         response_format: 'b64_json',
       },
-      { timeout: 30000, maxRetries: 0 }
+      { timeout: 60000, maxRetries: 0 }
     );
 
     if (response?.data?.[0]?.b64_json) {

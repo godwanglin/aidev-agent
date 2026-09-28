@@ -377,6 +377,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     | 'browserJsPolicy'
     | 'defaultShell'
     | 'defaultModel'
+    | 'defaultImageModel'
     | 'reasoningEffort'
     | 'securityPreset'
     | 'reviewPolicy'
@@ -426,8 +427,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [defaultModel, setDefaultModel] = useState('gemini-3.8-flash-high');
+  const [defaultImageModel, setDefaultImageModel] = useState('gpt-image-2.5');
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high'>('high');
   const [dynamicModels, setDynamicModels] = useState<GatewayModel[]>(() => models || []);
+  const [imageModels, setImageModels] = useState<GatewayModel[]>([]);
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
 
   // Application
@@ -1261,6 +1264,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (settings.gatewayUrl) setGatewayUrl(settings.gatewayUrl);
       if (settings.apiKey) setApiKey(settings.apiKey);
       if (settings.defaultModel) setDefaultModel(settings.defaultModel);
+      if (settings.defaultImageModel) setDefaultImageModel(settings.defaultImageModel);
       if (settings.theme) {
         setTheme(settings.theme);
         setGlobalTheme(settings.theme);
@@ -1277,6 +1281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           if (d.settings.gatewayUrl) setGatewayUrl(d.settings.gatewayUrl);
           if (d.settings.apiKey) setApiKey(d.settings.apiKey);
           if (d.settings.defaultModel) setDefaultModel(d.settings.defaultModel);
+          if (d.settings.defaultImageModel) setDefaultImageModel(d.settings.defaultImageModel);
           if (d.settings.theme) {
             setTheme(d.settings.theme);
             setGlobalTheme(d.settings.theme);
@@ -1309,6 +1314,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [models, isOpen]);
 
+  // Fetch image models for image generation dropdown
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/models?type=image')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.models && Array.isArray(d.models) && d.models.length > 0) {
+            setImageModels(d.models);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
   const handleRefreshModels = async () => {
     setIsRefreshingModels(true);
     try {
@@ -1317,6 +1336,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (data.models && Array.isArray(data.models) && data.models.length > 0) {
         setDynamicModels(data.models);
         onModelsRefreshed?.(data.models);
+      }
+      const imgRes = await fetch('/api/models?type=image&refresh=true');
+      const imgData = await imgRes.json().catch(() => ({}));
+      if (imgData.models && Array.isArray(imgData.models) && imgData.models.length > 0) {
+        setImageModels(imgData.models);
       }
     } catch (err) {
       console.error('Failed to refresh models cache:', err);
@@ -1364,6 +1388,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const updatedPayload = {
       apiKey,
       defaultModel,
+      defaultImageModel,
       theme,
       responseLanguage,
       defaultShell,
@@ -3097,6 +3122,116 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       );
                     })()}
                   </div>
+
+                  {/* Image Generation Model (Only when provider is Aidev Gateway) */}
+                  {(() => {
+                    const isAidev =
+                      !gatewayUrl ||
+                      gatewayUrl.includes('localhost:3000') ||
+                      gatewayUrl.includes('127.0.0.1:3000') ||
+                      gatewayUrl.includes('aidev') ||
+                      gatewayUrl.includes('weebinhub');
+
+                    if (!isAidev) return null;
+
+                    const displayImageModels =
+                      imageModels.length > 0
+                        ? imageModels.map((m) => ({
+                            id: m.id,
+                            label: m.name || m.id,
+                            badge: m.cost_per_image !== undefined ? `${m.cost_per_image} CR` : 'Image',
+                            desc: m.owned_by ? `Provider: ${m.owned_by}` : 'Public Image Generation Model',
+                          }))
+                        : [
+                            {
+                              id: 'gpt-image-2.5',
+                              label: 'GPT Image 2.5 HD',
+                              badge: '500 CR',
+                              desc: 'Photorealistic image generation via Aidev Gateway',
+                            },
+                          ];
+
+                    const activeImgModel = displayImageModels.find((m) => m.id === defaultImageModel);
+
+                    return (
+                      <div className="p-3.5 sm:p-4 flex items-center justify-between gap-4 relative">
+                        <div className="space-y-0.5 min-w-0 flex-1 pr-3">
+                          <div className="flex items-center gap-2">
+                            <div className="text-[13px] font-medium text-[#f0f0f2]">Image Generation Model</div>
+                            <span className="px-1.5 py-0.5 text-[9.5px] font-medium rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              Aidev Gateway
+                            </span>
+                          </div>
+                          <div className="text-[11.5px] text-[#868686] leading-relaxed">
+                            Model used for AI image generation tools and creative asset creation.
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenDropdown(
+                                  openDropdown === 'defaultImageModel' ? 'none' : 'defaultImageModel'
+                                )
+                              }
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#202022] hover:bg-[#28282c] border border-[#2e2e34] text-[11.5px] font-medium text-[#dededf] transition cursor-pointer whitespace-nowrap shrink-0"
+                            >
+                              <span>{activeImgModel?.label || defaultImageModel}</span>
+                              <ChevronDown className="w-3.5 h-3.5 text-[#868686]" />
+                            </button>
+
+                            <BottomSheet
+                              isOpen={openDropdown === 'defaultImageModel'}
+                              onClose={() => setOpenDropdown('none')}
+                              title="Image Generation Model"
+                              zIndex={100020}
+                              className="w-full sm:w-80 max-h-[80vh] sm:max-h-[400px] overflow-y-auto sm:top-full sm:right-0 sm:mt-1 bg-[#161616] border-t sm:border border-[#28282e] py-2 sm:py-1 divide-y divide-[#202024]"
+                            >
+                              {displayImageModels.map((opt) => {
+                                const isSelected = defaultImageModel === opt.id;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setDefaultImageModel(opt.id);
+                                      setOpenDropdown('none');
+                                    }}
+                                    className="w-full flex items-start justify-between px-4 sm:px-3 py-3 sm:py-2 text-left hover:bg-[#202024] transition cursor-pointer group"
+                                  >
+                                    <div className="pr-2 min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span
+                                          className={`text-[13px] sm:text-[11.5px] font-medium truncate ${
+                                            isSelected ? 'text-white' : 'text-[#dededf]'
+                                          }`}
+                                        >
+                                          {opt.label}
+                                        </span>
+                                        {opt.badge && (
+                                          <span className="px-1.5 py-0.2 rounded text-[10px] sm:text-[9.5px] bg-[#222226] text-[#a0a0a8] font-mono shrink-0">
+                                            {opt.badge}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] sm:text-[10.5px] text-[#868686] mt-0.5 leading-snug truncate">
+                                        {opt.desc}
+                                      </div>
+                                    </div>
+                                    {isSelected && (
+                                      <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-white shrink-0 mt-0.5 ml-2" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </BottomSheet>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Reasoning Effort */}
                   <div className="p-3.5 sm:p-4 flex items-center justify-between gap-4 relative">
