@@ -15,8 +15,8 @@ export const SlashChip: React.FC<SlashChipProps> = ({ command, onClick, onDelete
   const getStyle = () => {
     if (cleanCmd.startsWith('/image')) {
       return {
-        bg: 'bg-[#291738] hover:bg-[#351e49] border-[#5e2b82] text-[#d8b4fe]',
-        icon: <ImageIcon className="w-3 h-3 text-[#c084fc] shrink-0" />,
+        bg: 'bg-[#1e1e24] hover:bg-[#272730] border-[#363642] text-[#d4d4dc]',
+        icon: <ImageIcon className="w-3 h-3 text-[#a1a1aa] shrink-0" />,
       };
     }
     if (cleanCmd.startsWith('/skill:')) {

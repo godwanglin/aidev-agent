@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Image as ImageIcon, Sparkles, Loader2, X, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Loader2, X, AlertCircle, ChevronDown, Check, Sparkles } from 'lucide-react';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 
 export interface ImageGenerateCardProps {
   sessionId: string;
@@ -11,11 +12,11 @@ export interface ImageGenerateCardProps {
 }
 
 const ASPECT_RATIOS = [
-  { id: '1:1', label: '1:1 Square' },
-  { id: '16:9', label: '16:9 Landscape' },
-  { id: '9:16', label: '9:16 Portrait' },
-  { id: '4:3', label: '4:3 Standard' },
-  { id: '3:4', label: '3:4 Vertical' },
+  { id: '1:1', label: '1:1' },
+  { id: '16:9', label: '16:9' },
+  { id: '9:16', label: '9:16' },
+  { id: '4:3', label: '4:3' },
+  { id: '3:4', label: '3:4' },
 ];
 
 export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
@@ -29,18 +30,20 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
   const [selectedModel, setSelectedModel] = useState<string>('gpt-image-2.5');
   const [availableImageModels, setAvailableImageModels] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-focus prompt input
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       textareaRef.current?.focus();
       if (initialPrompt) {
         textareaRef.current?.setSelectionRange(initialPrompt.length, initialPrompt.length);
       }
     }, 50);
+    return () => clearTimeout(timer);
   }, [initialPrompt]);
 
   // Load available image models
@@ -52,7 +55,6 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
         const data = await res.json();
         if (isMounted && data.models && Array.isArray(data.models)) {
           setAvailableImageModels(data.models);
-          // If gpt-image-2.5 exists in list, keep it; otherwise pick first
           if (data.models.length > 0) {
             const hasGptImage = data.models.some((m: any) => m.id === 'gpt-image-2.5');
             if (!hasGptImage) {
@@ -72,10 +74,14 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
     };
   }, []);
 
-  // Keyboard shortcut: Escape to close, Ctrl+Enter or Enter to submit
+  // Keyboard shortcut: Escape to close, Ctrl+Enter or Cmd+Enter to submit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isGenerating) {
+        if (isModelDropdownOpen) {
+          setIsModelDropdownOpen(false);
+          return;
+        }
         e.preventDefault();
         onClose();
         return;
@@ -89,7 +95,7 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prompt, selectedModel, aspectRatio, isGenerating]);
+  }, [prompt, selectedModel, aspectRatio, isGenerating, isModelDropdownOpen]);
 
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return;
@@ -115,160 +121,202 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error occurred while generating image');
+      setErrorMsg(err.message || 'Terjadi kesalahan saat membuat gambar');
       setIsGenerating(false);
     }
   };
 
+  const selectedModelObj = availableImageModels.find((m) => m.id === selectedModel);
+  const selectedModelLabel = selectedModelObj?.name || selectedModel;
+
   return (
-    <div className="relative mb-3 rounded-2xl border border-purple-500/30 bg-slate-900/95 dark:bg-[#16131f]/95 backdrop-blur-md shadow-2xl p-4 transition-all animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div className="relative mb-3 rounded-xl border border-slate-200 dark:border-[#262626] bg-white dark:bg-[#161616] p-3.5 space-y-3 text-xs select-none shadow-md dark:shadow-xl font-sans transition-all animate-in fade-in slide-in-from-bottom-2 duration-150">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-purple-500/20 mb-3">
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#262626] pb-2.5">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
-            <ImageIcon size={15} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-purple-200">Generate Image</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                Direct Tool Trigger (0 AI Tokens)
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-[#a09bb5]">
-              Langsung generate gambar via Gateway tanpa request prompt LLM tambahan.
-            </p>
-          </div>
+          <ImageIcon className="w-3.5 h-3.5 text-slate-500 dark:text-[#8c8c8c]" strokeWidth={1.75} />
+          <span className="text-[12px] font-medium text-slate-800 dark:text-[#cccccc]">Generate Image</span>
         </div>
 
         <button
           type="button"
           onClick={onClose}
           disabled={isGenerating}
-          className="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-white/5 transition cursor-pointer"
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.05] transition cursor-pointer"
           title="Tutup (Esc)"
         >
-          <X size={15} />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Error Alert */}
       {errorMsg && (
-        <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
-          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <strong>Gagal membuat gambar:</strong>
-            <p className="mt-0.5 text-[11.5px] text-red-200">{errorMsg}</p>
+            <span className="font-medium">Gagal membuat gambar:</span>
+            <p className="mt-0.5 text-[11.5px] opacity-90">{errorMsg}</p>
           </div>
         </div>
       )}
 
       {/* Prompt Textarea */}
-      <div className="space-y-1.5 mb-3">
-        <label className="text-[11px] font-semibold text-slate-300 dark:text-[#d4cde6] flex items-center justify-between">
-          <span>Prompt Gambar</span>
-          <span className="text-[10px] text-slate-500 font-normal">Tekan Ctrl+Enter untuk generate</span>
-        </label>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[11.5px] font-medium text-slate-700 dark:text-[#b3b3b3]">
+            Prompt Gambar
+          </label>
+          <span className="text-[10.5px] text-slate-400 dark:text-[#666666]">
+            Tekan Ctrl+Enter untuk generate
+          </span>
+        </div>
         <textarea
           ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           disabled={isGenerating}
-          placeholder="Contoh: A hyperrealistic cyberpunk cat samurai wearing neon katana in rainy Tokyo alley, cinematic lighting 8k..."
+          placeholder="Deskripsikan gambar yang ingin dibuat secara detail..."
           rows={3}
-          className="w-full rounded-xl bg-slate-950/80 dark:bg-[#0e0b17] border border-purple-500/25 focus:border-purple-400 text-xs text-slate-100 placeholder-slate-500 p-3 outline-none resize-none transition"
+          className="w-full rounded-lg bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#262626] focus:border-slate-400 dark:focus:border-[#444444] text-[12.5px] text-slate-900 dark:text-[#e0e0e0] placeholder-slate-400 dark:placeholder-[#666666] p-2.5 outline-none resize-none transition leading-relaxed"
         />
       </div>
 
       {/* Controls Grid: Model & Aspect Ratio */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        {/* Model Selector */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Custom Dropdown Model Selector */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-slate-300 dark:text-[#d4cde6]">
+          <label className="text-[11.5px] font-medium text-slate-700 dark:text-[#b3b3b3]">
             Model Image AI
           </label>
-          <div className="relative">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
               disabled={isGenerating || isLoadingModels}
-              className="w-full appearance-none rounded-lg bg-slate-950/80 dark:bg-[#0e0b17] border border-purple-500/25 text-xs text-slate-200 px-3 py-2 outline-none focus:border-purple-400 cursor-pointer pr-8 font-mono"
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#262626] text-[12px] text-slate-800 dark:text-[#cccccc] transition cursor-pointer select-none ${
+                isModelDropdownOpen ? 'border-slate-400 dark:border-[#444444]' : ''
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                <Sparkles className="w-3.5 h-3.5 text-slate-400 dark:text-[#737373] shrink-0" />
+                <span className="truncate">{selectedModelLabel}</span>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-slate-400 dark:text-[#666666] shrink-0 transition-transform duration-150 ${
+                  isModelDropdownOpen ? 'rotate-180 text-slate-700 dark:text-[#e0e0e0]' : ''
+                }`}
+              />
+            </button>
+
+            <BottomSheet
+              isOpen={isModelDropdownOpen}
+              onClose={() => setIsModelDropdownOpen(false)}
+              title="Pilih Model Image"
+              zIndex={100020}
+              className="w-full sm:w-full max-h-[70vh] sm:max-h-56 overflow-y-auto sm:top-full sm:left-0 sm:mt-1 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2a2a2a] p-1 divide-y divide-slate-100 dark:divide-[#222222] shadow-xl"
             >
               {availableImageModels.length > 0 ? (
-                availableImageModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name || m.id}
-                  </option>
-                ))
+                availableImageModels.map((m) => {
+                  const isSelected = selectedModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedModel(m.id);
+                        setIsModelDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 sm:py-1.5 rounded-lg text-left transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-slate-100 dark:bg-[#252525] text-slate-900 dark:text-white font-medium'
+                          : 'text-slate-700 dark:text-[#cccccc] hover:bg-slate-50 dark:hover:bg-[#202020] hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <Sparkles className="w-3.5 h-3.5 text-slate-400 dark:text-[#888888] shrink-0" />
+                        <span className="truncate text-[12px]">{m.name || m.id}</span>
+                      </div>
+                      {isSelected && (
+                        <Check className="w-3.5 h-3.5 text-slate-900 dark:text-white shrink-0 ml-1.5" />
+                      )}
+                    </button>
+                  );
+                })
               ) : (
-                <>
-                  <option value="gpt-image-2.5">gpt-image-2.5 (Aidev Gateway)</option>
-                  <option value="flux">flux (Pollinations / Fal)</option>
-                  <option value="turbo">turbo (SDXL Fast)</option>
-                </>
+                <div className="px-3 py-2 text-slate-400 dark:text-[#888888] text-[11.5px]">
+                  {isLoadingModels ? 'Memuat model...' : 'Tidak ada model tersedia'}
+                </div>
               )}
-            </select>
-            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-purple-400 text-xs">
-              ▾
-            </div>
+            </BottomSheet>
           </div>
         </div>
 
         {/* Aspect Ratio Selector */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-slate-300 dark:text-[#d4cde6]">
+          <label className="text-[11.5px] font-medium text-slate-700 dark:text-[#b3b3b3]">
             Rasio Gambar (Aspect Ratio)
           </label>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {ASPECT_RATIOS.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setAspectRatio(r.id)}
-                disabled={isGenerating}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono transition cursor-pointer border ${
-                  aspectRatio === r.id
-                    ? 'bg-purple-500/25 border-purple-400 text-purple-200 font-semibold shadow-sm'
-                    : 'bg-slate-950/60 dark:bg-[#0e0b17] border-slate-700/60 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                }`}
-              >
-                {r.id}
-              </button>
-            ))}
+            {ASPECT_RATIOS.map((r) => {
+              const isSelected = aspectRatio === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setAspectRatio(r.id)}
+                  disabled={isGenerating}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-mono transition cursor-pointer border ${
+                    isSelected
+                      ? 'bg-slate-200 dark:bg-[#282828] border-slate-300 dark:border-[#444444] text-slate-900 dark:text-white font-medium'
+                      : 'bg-slate-50/70 hover:bg-slate-100 dark:bg-[#1a1a1a] dark:hover:bg-[#1f1f1f] border-slate-200 hover:border-slate-300 dark:border-[#262626] dark:hover:border-[#333333] text-slate-600 dark:text-[#8c8c8c]'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
       {/* Footer Controls */}
-      <div className="flex items-center justify-between pt-3 border-t border-purple-500/20">
-        <span className="text-[11px] text-slate-400 dark:text-[#8d87a3]">
-          Hasil generate langsung tersimpan di artifacts & workspace.
-        </span>
+      <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-[#262626]">
+        <div className="text-[11px] text-slate-500 dark:text-[#666666] hidden sm:flex items-center gap-1 font-sans">
+          <span>Press</span>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 rounded text-slate-600 dark:text-[#8c8c8c]">
+            Ctrl+Enter ↵
+          </kbd>
+          <span>to generate</span>
+        </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isGenerating}
-            className="px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white hover:bg-white/5 border border-slate-700 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 dark:text-[#8c8c8c] dark:hover:text-[#e0e0e0] dark:hover:bg-white/[0.05] dark:border-[#2a2a2a] dark:hover:border-[#383838] transition cursor-pointer"
           >
-            Batal (Esc)
+            <span>Batal</span>
           </button>
 
           <button
             type="button"
             onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+              isGenerating || !prompt.trim()
+                ? 'bg-slate-100 dark:bg-[#222222] text-slate-400 dark:text-[#666666] border border-slate-200 dark:border-[#2a2a2a] cursor-not-allowed'
+                : 'bg-slate-900 hover:bg-slate-800 text-white border border-slate-800 dark:bg-[#28282e] dark:hover:bg-[#333338] dark:text-[#ffffff] dark:border-[#3a3a40] active:scale-[0.98]'
+            }`}
           >
             {isGenerating ? (
               <>
-                <Loader2 size={13} className="animate-spin" />
+                <Loader2 className="w-3 h-3 animate-spin text-slate-400 dark:text-[#8c8c8c]" />
                 <span>Generating...</span>
               </>
             ) : (
               <>
-                <Sparkles size={13} />
+                <Sparkles className="w-3.5 h-3.5 text-slate-300 dark:text-[#a0a0a8]" />
                 <span>Generate Image</span>
               </>
             )}
