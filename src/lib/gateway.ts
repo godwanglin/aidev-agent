@@ -42,10 +42,18 @@ export interface ModelCacheEntry {
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache (instant local reloads)
 
+export function normalizeGatewayUrl(url?: string): string {
+  let clean = (url || 'https://aidev.weebinhub.biz.id/v1').trim().replace(/\/+$/, '');
+  if (!clean.endsWith('/v1')) {
+    clean = `${clean}/v1`;
+  }
+  return clean;
+}
+
 export function getOpenAIClient(): OpenAI {
   const settings = loadSettings();
   return new OpenAI({
-    baseURL: settings.gatewayUrl,
+    baseURL: normalizeGatewayUrl(settings.gatewayUrl),
     apiKey: settings.apiKey || process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444',
     fetch: createSafeSseFetch(),
   });
@@ -62,7 +70,7 @@ export async function getUserEligibility(): Promise<{
   const settings = loadSettings();
   const rawKey = settings.apiKey || process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444';
   try {
-    const baseUrl = settings.gatewayUrl.replace(/\/+$/, '');
+    const baseUrl = normalizeGatewayUrl(settings.gatewayUrl);
     const res = await fetch(`${baseUrl}/eligibility`, {
       headers: {
         Authorization: `Bearer ${rawKey}`,
@@ -169,7 +177,7 @@ export async function getUserUsage(): Promise<UserUsageData | null> {
 
   // 1. Attempt to fetch live usage from Aidev Gateway
   try {
-    const baseUrl = gatewayUrl.replace(/\/+$/, '');
+    const baseUrl = normalizeGatewayUrl(gatewayUrl);
     const res = await fetch(`${baseUrl}/usage`, {
       headers: {
         Authorization: `Bearer ${rawKey}`,
@@ -564,7 +572,7 @@ export async function getAvailableImageModels(forceRefresh = false): Promise<Gat
     settings.gatewayUrl.includes('weebinhub');
 
   const rawKey = settings.apiKey || process.env.AIDEV_GATEWAY_KEY || 'sk-int-testbench999900001111222233334444';
-  const baseUrl = settings.gatewayUrl.replace(/\/+$/, '');
+  const baseUrl = normalizeGatewayUrl(settings.gatewayUrl);
   const imageModels: GatewayModel[] = [];
 
   if (isAidevGateway) {

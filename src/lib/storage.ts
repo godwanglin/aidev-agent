@@ -197,7 +197,6 @@ export function loadSettings(): AidevSettings {
 
     if (
       !settings.gatewayUrl ||
-      settings.gatewayUrl === 'http://localhost:3000/v1' ||
       settings.gatewayUrl.includes('9rt.topupin.store')
     ) {
       settings.gatewayUrl = DEFAULT_SETTINGS.gatewayUrl;
