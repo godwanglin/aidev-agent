@@ -111,14 +111,20 @@ export async function executeGenerateImage(
 
   try {
     const client = getOpenAIClient();
+    const ratio = params.aspect_ratio || '1:1';
+    let upstreamPrompt = prompt;
+    if (ratio !== '1:1' && !upstreamPrompt.includes('--ar')) {
+      upstreamPrompt = `${upstreamPrompt} --ar ${ratio}`;
+    }
     const sizeStr = `${width}x${height}` as any;
     const response = await client.images.generate(
       {
         model: requestedImageModel,
-        prompt,
+        prompt: upstreamPrompt,
         n: 1,
         size: sizeStr,
         response_format: 'b64_json',
+        ...({ aspect_ratio: ratio } as any),
       },
       { timeout: 90000, maxRetries: 0 }
     );
@@ -239,15 +245,92 @@ export async function executeGenerateImage(
     ? `![${prompt.slice(0, 40)}](${mediaUrl})`
     : `![${prompt.slice(0, 40)}](${relativeDisplayPath})`;
 
+  const actualDims = extractImageDimensions(imageBuffer);
+  const realWidth = actualDims?.width || width;
+  const realHeight = actualDims?.height || height;
+
   return {
     success: true,
     path: resolvedAbsPath,
     relativePath: relativeDisplayPath,
-    width,
-    height,
+    width: realWidth,
+    height: realHeight,
     sizeBytes: imageBuffer.length,
     mediaUrl,
     markdown: markdownDisplay,
-    message: `Image successfully generated and saved to ${relativeDisplayPath} (${width}x${height}, ${(imageBuffer.length / 1024).toFixed(1)} KB).`,
+    message: `Image successfully generated and saved to ${relativeDisplayPath} (${realWidth}x${realHeight}, ${(imageBuffer.length / 1024).toFixed(1)} KB).`,
   };
+}
+
+/**
+ * Reads real pixel dimensions from PNG, JPEG, or WebP buffer header without native dependencies.
+ */
+function extractImageDimensions(buffer: Buffer): { width: number; height: number } | null {
+  try {
+    // 1. PNG: 89 50 4E 47 0D 0A 1A 0A -> IHDR at byte 16 (width), byte 20 (height)
+    if (
+      buffer.length >= 24 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47
+    ) {
+      return {
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20),
+      };
+    }
+
+    // 2. JPEG: Starts with FF D8
+    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let offset = 2;
+      while (offset < buffer.length) {
+        if (buffer[offset] !== 0xff) break;
+        const marker = buffer[offset + 1];
+        if (
+          (marker >= 0xc0 && marker <= 0xc3) ||
+          (marker >= 0xc5 && marker <= 0xc7) ||
+          (marker >= 0xc9 && marker <= 0xcb) ||
+          (marker >= 0xcd && marker <= 0xcf)
+        ) {
+          return {
+            height: buffer.readUInt16BE(offset + 5),
+            width: buffer.readUInt16BE(offset + 7),
+          };
+        }
+        const length = buffer.readUInt16BE(offset + 2);
+        offset += 2 + length;
+      }
+    }
+
+    // 3. WebP: RIFF .... WEBP
+    if (
+      buffer.length >= 30 &&
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      const type = buffer.toString('ascii', 12, 16);
+      if (type === 'VP8 ') {
+        return {
+          width: buffer.readUInt16LE(26) & 0x3fff,
+          height: buffer.readUInt16LE(28) & 0x3fff,
+        };
+      } else if (type === 'VP8L') {
+        const b0 = buffer[21];
+        const b1 = buffer[22];
+        const b2 = buffer[23];
+        const b3 = buffer[24];
+        return {
+          width: 1 + (((b1 & 0x3f) << 8) | b0),
+          height: 1 + (((b3 & 0xf) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6)),
+        };
+      } else if (type === 'VP8X') {
+        return {
+          width: 1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16)),
+          height: 1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16)),
+        };
+      }
+    }
+  } catch {}
+  return null;
 }

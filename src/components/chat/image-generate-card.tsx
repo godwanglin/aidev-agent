@@ -32,6 +32,7 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -77,7 +78,7 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
   // Keyboard shortcut: Escape to close, Ctrl+Enter or Cmd+Enter to submit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isGenerating) {
+      if (e.key === 'Escape' && !isGenerating && !isGeneratingRef.current) {
         if (isModelDropdownOpen) {
           setIsModelDropdownOpen(false);
           return;
@@ -89,7 +90,9 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        handleGenerate();
+        if (!isGenerating && !isGeneratingRef.current) {
+          handleGenerate();
+        }
       }
     };
 
@@ -98,7 +101,8 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
   }, [prompt, selectedModel, aspectRatio, isGenerating, isModelDropdownOpen]);
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || isGenerating) return;
+    if (!prompt.trim() || isGenerating || isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
     setErrorMsg(null);
     setIsGenerating(true);
 
@@ -122,6 +126,8 @@ export const ImageGenerateCard: React.FC<ImageGenerateCardProps> = ({
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Terjadi kesalahan saat membuat gambar');
+    } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };
