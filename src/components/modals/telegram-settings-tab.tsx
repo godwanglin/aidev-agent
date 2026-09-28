@@ -15,8 +15,17 @@ import {
   ExternalLink,
   Power,
   Terminal,
+  Trash2,
 } from 'lucide-react';
 import type { ProjectRecord } from '@/lib/db';
+
+interface TelegramLogEntry {
+  id: string;
+  timestamp: number;
+  level: 'info' | 'warn' | 'error' | 'cmd';
+  message: string;
+  details?: string;
+}
 
 interface TelegramSettingsTabProps {
   projects: ProjectRecord[];
@@ -48,37 +57,87 @@ export const TelegramSettingsTab: React.FC<TelegramSettingsTabProps> = ({ projec
 
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Live Logs state
+  const [logs, setLogs] = useState<TelegramLogEntry[]>([]);
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const [copiedLogs, setCopiedLogs] = useState(false);
+  const logsEndRef = React.useRef<HTMLDivElement>(null);
+
   // Fetch current telegram configuration & status
-  const fetchStatus = async () => {
+  const fetchStatus = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const res = await fetch('/api/telegram');
       if (res.ok) {
         const data = await res.json();
         setBotStatus(data);
-        setEnabled(Boolean(data.enabled));
-        setAllowedUserIds(data.allowedUserIds || '');
-        setDefaultProjectId(data.defaultProjectId || (projects[0]?.id || ''));
+        if (!silent) {
+          setEnabled(Boolean(data.enabled));
+          setAllowedUserIds(data.allowedUserIds || '');
+          setDefaultProjectId(data.defaultProjectId || (projects[0]?.id || ''));
+        }
+        if (Array.isArray(data.logs)) {
+          setLogs(data.logs);
+        }
       }
 
-      // Also get raw token from settings
-      const cfgRes = await fetch('/api/config');
-      if (cfgRes.ok) {
-        const cfgData = await cfgRes.json();
-        if (cfgData?.settings?.telegramBotToken) {
-          setBotToken(cfgData.settings.telegramBotToken);
+      // Also get raw token from settings on initial load
+      if (!silent) {
+        const cfgRes = await fetch('/api/config');
+        if (cfgRes.ok) {
+          const cfgData = await cfgRes.json();
+          if (cfgData?.settings?.telegramBotToken) {
+            setBotToken(cfgData.settings.telegramBotToken);
+          }
         }
       }
     } catch (err) {
       console.error('Failed fetching telegram settings:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchStatus();
+    // Live polling every 2.5s for status and live logs
+    const interval = setInterval(() => {
+      fetchStatus(true);
+    }, 2500);
+
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (isAutoScroll && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, isAutoScroll]);
+
+  const handleClearLogs = async () => {
+    try {
+      await fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear_logs' }),
+      });
+      setLogs([]);
+    } catch {}
+  };
+
+  const handleCopyLogs = () => {
+    const text = logs
+      .map(
+        (l) =>
+          `[${new Date(l.timestamp).toLocaleTimeString()}] [${l.level.toUpperCase()}] ${l.message}${
+            l.details ? ' (' + l.details + ')' : ''
+          }`
+      )
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedLogs(true);
+    setTimeout(() => setCopiedLogs(false), 2000);
+  };
 
   // Test token validation
   const handleTestToken = async () => {
@@ -189,7 +248,7 @@ export const TelegramSettingsTab: React.FC<TelegramSettingsTabProps> = ({ projec
 
           <button
             type="button"
-            onClick={fetchStatus}
+            onClick={() => fetchStatus()}
             title="Refresh Status"
             className="p-1.5 rounded-lg border border-[#2b2b30] bg-[#17171a] text-[#8e8e93] hover:text-white hover:bg-[#202024] transition cursor-pointer"
           >
@@ -369,6 +428,93 @@ export const TelegramSettingsTab: React.FC<TelegramSettingsTabProps> = ({ projec
         </div>
       </div>
 
+      {/* 2.5 Live Activity & Command Logs */}
+      <div className="p-4 rounded-xl bg-[#141416] border border-[#242428] space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-blue-400" />
+            <h3 className="text-[13px] font-semibold text-white">Live Activity & Command Logs</h3>
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] bg-emerald-500/10 text-emerald-400 font-medium">
+              <span className={`w-1.5 h-1.5 rounded-full ${botStatus?.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-[#666]'}`} />
+              {botStatus?.isRunning ? 'Live Polling' : 'Offline'} ({logs.length})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsAutoScroll(!isAutoScroll)}
+              title={isAutoScroll ? 'Auto-scroll aktif' : 'Auto-scroll nonaktif'}
+              className={`px-2 py-1 text-[11px] rounded-md border transition cursor-pointer ${
+                isAutoScroll
+                  ? 'bg-blue-600/20 text-blue-300 border-blue-500/30'
+                  : 'bg-[#1e1e24] text-[#888] border-[#2c2c34]'
+              }`}
+            >
+              Auto-scroll: {isAutoScroll ? 'ON' : 'OFF'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyLogs}
+              disabled={logs.length === 0}
+              className="p-1.5 rounded-md hover:bg-[#222228] text-[#8e8e93] hover:text-white transition cursor-pointer disabled:opacity-40"
+              title="Copy All Logs"
+            >
+              {copiedLogs ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearLogs}
+              disabled={logs.length === 0}
+              className="p-1.5 rounded-md hover:bg-[#222228] text-[#8e8e93] hover:text-rose-400 transition cursor-pointer disabled:opacity-40"
+              title="Clear Logs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => fetchStatus(true)}
+              className="p-1.5 rounded-md hover:bg-[#222228] text-[#8e8e93] hover:text-white transition cursor-pointer"
+              title="Refresh Logs"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Terminal Screen */}
+        <div className="w-full h-56 bg-[#0c0c0e] border border-[#222226] rounded-lg p-3 font-mono text-[11.5px] overflow-y-auto space-y-1.5 select-text">
+          {logs.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-[#555] space-y-1">
+              <span>Belum ada riwayat aktivitas bot tercatat.</span>
+              <span className="text-[10.5px] text-[#444]">Kirim pesan atau command di Telegram untuk melihat logs live.</span>
+            </div>
+          ) : (
+            logs.map((log) => {
+              const timeStr = new Date(log.timestamp).toLocaleTimeString();
+              let badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+              if (log.level === 'cmd') badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold';
+              else if (log.level === 'warn') badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+              else if (log.level === 'error') badgeColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold';
+
+              return (
+                <div key={log.id} className="flex items-start gap-2 leading-relaxed hover:bg-white/[0.02] px-1 py-0.5 rounded">
+                  <span className="text-[#555] shrink-0 font-mono">{timeStr}</span>
+                  <span className={`px-1.5 py-0.2 rounded border text-[10px] shrink-0 uppercase tracking-wider ${badgeColor}`}>
+                    {log.level}
+                  </span>
+                  <div className="text-[#ccc] break-all flex-1">
+                    <span>{log.message}</span>
+                    {log.details && <span className="text-[#777] ml-1.5">({log.details})</span>}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={logsEndRef} />
+        </div>
+      </div>
+
       {/* 3. Setup Guide in 3 Steps */}
       <div className="p-4 rounded-xl bg-[#141416]/80 border border-[#222226] space-y-3">
         <h3 className="text-[13px] font-semibold text-white flex items-center gap-2">
@@ -409,6 +555,10 @@ export const TelegramSettingsTab: React.FC<TelegramSettingsTabProps> = ({ projec
             <p className="text-[#888] mt-0.5">Pilih / ganti project workspace dengan tombol Telegram.</p>
           </div>
           <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
+            <code className="text-blue-400 font-semibold">/sessions</code>
+            <p className="text-[#888] mt-0.5">Pilih & masuk ke sesi chat yang sudah ada di project aktif.</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
             <code className="text-blue-400 font-semibold">/status</code>
             <p className="text-[#888] mt-0.5">Cek kondisi PC (RAM, CPU, Uptime, Model AI).</p>
           </div>
@@ -423,6 +573,14 @@ export const TelegramSettingsTab: React.FC<TelegramSettingsTabProps> = ({ projec
           <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
             <code className="text-blue-400 font-semibold">/new</code>
             <p className="text-[#888] mt-0.5">Mulai sesi chat baru di project aktif.</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
+            <code className="text-blue-400 font-semibold">/plan &lt;tujuan&gt;</code>
+            <p className="text-[#888] mt-0.5">Mode perencanaan & interview implementasi arsitektur.</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
+            <code className="text-blue-400 font-semibold">/cls</code>
+            <p className="text-[#888] mt-0.5">Bersihkan riwayat pesan di layar Telegram agar rapi.</p>
           </div>
           <div className="p-2.5 rounded-lg bg-[#1a1a1e] border border-[#26262a]">
             <code className="text-blue-400 font-semibold">/stop</code>

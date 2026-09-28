@@ -149,6 +149,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
   // Streaming status reference to prevent premature message overwriting
   const isStreamingRef = useRef(false);
+  const isLocalStreamingRef = useRef(false);
   useEffect(() => {
     isStreamingRef.current = isStreaming;
   }, [isStreaming]);
@@ -554,6 +555,9 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
         const loadedAllSessions: SessionRecord[] = sessData.sessions || [];
         setAllSessions(loadedAllSessions);
 
+        // Auto-check and auto-start Telegram bot in background if enabled
+        fetch('/api/telegram').catch(() => {});
+
         const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         const effectiveSessionId = initialSessionId || urlParams?.get('session') || undefined;
 
@@ -676,6 +680,18 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     allSessionsRef.current = allSessions;
   }, [allSessions]);
   const lastStreamDoneAtRef = useRef<number>(0);
+
+  const refreshAllSessions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sessions');
+      const data = await res.json();
+      if (Array.isArray(data.sessions)) {
+        setAllSessions(data.sessions);
+      }
+    } catch (e) {
+      console.error('Failed to refresh sessions:', e);
+    }
+  }, []);
 
   // 3. Session Change: Load Message History & Workspace Inspector Data
   const refreshSessionData = useCallback(async (options?: { skipMessages?: boolean; forceMessages?: boolean; targetSessionId?: string }) => {
@@ -934,31 +950,6 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     refreshSessionData();
   }, [refreshSessionData]);
 
-  // Periodically poll session orchestrator status when running across page reloads
-  useEffect(() => {
-    if (!isStreaming || !currentSession?.id) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/sessions/${currentSession.id}`);
-        const data = await res.json();
-        if (data.isRunning) {
-          refreshSessionData({ forceMessages: true });
-        } else {
-          setIsStreaming(false);
-          refreshSessionData({ forceMessages: true });
-          if (typeof window !== 'undefined' && localStorage.getItem('aidev_sound_notifications') !== 'false') {
-            playNotificationChime();
-          }
-        }
-      } catch (pollErr) {
-        console.error('Failed polling session orchestrator:', pollErr);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [isStreaming, currentSession?.id, refreshSessionData]);
-
   // Periodically refresh tasks when at least one task is running
   useEffect(() => {
     const hasRunningTask = tasks.some((t) => t.status === 'RUNNING');
@@ -1103,6 +1094,262 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
     },
     [currentProject?.workdir_path, currentSession?.id]
   );
+
+  // Hybrid Real-Time Sync: Primary = SSE Event Stream, Fallback = Auto-Sync Polling (~2.5s) & Window Focus
+  useEffect(() => {
+    if (!currentSession?.id) return;
+    const sessionId = currentSession.id;
+    let sseActive = false;
+    let eventSource: EventSource | null = null;
+    let fallbackInterval: NodeJS.Timeout | null = null;
+
+    const startFallbackPolling = () => {
+      if (fallbackInterval) return;
+      fallbackInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/sessions/${sessionId}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.isRunning) {
+            if (!isStreamingRef.current) {
+              setIsStreaming(true);
+              isStreamingRef.current = true;
+            }
+            refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+          } else if (isStreamingRef.current && !isLocalStreamingRef.current) {
+            setIsStreaming(false);
+            isStreamingRef.current = false;
+            refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+          }
+        } catch {}
+      }, 2500);
+    };
+
+    const stopFallbackPolling = () => {
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+        fallbackInterval = null;
+      }
+    };
+
+    try {
+      eventSource = new EventSource(`/api/sessions/${sessionId}/events`);
+
+      eventSource.onopen = () => {
+        sseActive = true;
+        stopFallbackPolling();
+      };
+
+      eventSource.onmessage = (e) => {
+        try {
+          if (!e.data || e.data === ': ping') return;
+          const event = JSON.parse(e.data);
+
+          // Handle global sessions_updated event
+          if (event.type === 'sessions_updated') {
+            refreshAllSessions();
+            if (event.data?.sessionId === sessionId) {
+              refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+            }
+            return;
+          }
+
+          // If session event is for a different session, ignore
+          if (event.sessionId && event.sessionId !== sessionId) return;
+
+          if (event.type === 'turn_start') {
+            if (!isLocalStreamingRef.current) {
+              setIsStreaming(true);
+              isStreamingRef.current = true;
+              setStreamingReasoning('');
+              setStreamingContent('');
+              setLiveToolMessages([]);
+              if (event.data?.prompt) {
+                const userMsg: MessageRecord = {
+                  id: event.data.messageId || `msg_${Date.now()}_user`,
+                  session_id: sessionId,
+                  role: 'user',
+                  content: event.data.prompt,
+                  created_at: event.data.timestamp || Date.now(),
+                };
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === userMsg.id || m.content === userMsg.content)) return prev;
+                  return [...prev.filter((m) => m.status !== 'ERROR'), userMsg];
+                });
+              }
+            }
+            return;
+          }
+
+          // Intermediate deltas and status from remote (e.g. Telegram / other tab)
+          if (!isLocalStreamingRef.current) {
+            if (event.type === 'reasoning_delta') {
+              const delta = event.delta || event.data?.text || '';
+              if (!isStreamingRef.current) {
+                setIsStreaming(true);
+                isStreamingRef.current = true;
+              }
+              setStreamingReasoning((prev) => prev + delta);
+            } else if (event.type === 'content_delta') {
+              const delta = event.delta || event.data?.text || '';
+              const full = event.data?.full;
+              if (!isStreamingRef.current) {
+                setIsStreaming(true);
+                isStreamingRef.current = true;
+              }
+              setLiveToolMessages((currentLive) => {
+                if (currentLive.length > 0 && currentLive.every((m) => m.status !== 'RUNNING')) {
+                  setMessages((prev) => {
+                    const unadded = currentLive.filter(
+                      (lt) => !prev.some((p) => (lt.tool_call_id && p.tool_call_id === lt.tool_call_id) || p.id === lt.id)
+                    );
+                    if (unadded.length === 0) return prev;
+                    return [...prev, ...unadded];
+                  });
+                  return [];
+                }
+                return currentLive;
+              });
+              if (typeof full === 'string' && delta === '') {
+                setStreamingContent(full);
+              } else {
+                setStreamingContent((prev) => prev + delta);
+              }
+            } else if (event.type === 'tool_start') {
+              if (event.data?.toolCallId && event.data?.toolName) {
+                const newToolMsg: MessageRecord = {
+                  id: `live_${event.data.toolCallId}`,
+                  session_id: sessionId,
+                  role: 'tool',
+                  content: null,
+                  tool_call_id: event.data.toolCallId,
+                  tool_name: event.data.toolName,
+                  tool_arguments: typeof event.data.arguments === 'string'
+                    ? event.data.arguments
+                    : JSON.stringify(event.data.arguments || {}),
+                  tool_result: null,
+                  status: 'RUNNING',
+                  created_at: Date.now(),
+                };
+                setLiveToolMessages((prev) => {
+                  const idx = prev.findIndex((m) => m.tool_call_id === event.data.toolCallId);
+                  if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...newToolMsg };
+                    return updated;
+                  }
+                  return [...prev, newToolMsg];
+                });
+              }
+            } else if (event.type === 'tool_completed') {
+              if (event.data?.toolCallId) {
+                const resultStr = typeof event.data.result === 'string'
+                  ? event.data.result
+                  : JSON.stringify(event.data.result ?? '');
+                setLiveToolMessages((prev) => {
+                  const idx = prev.findIndex((m) => m.tool_call_id === event.data.toolCallId);
+                  if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      status: event.data.status || 'COMPLETED',
+                      tool_result: resultStr,
+                      content: resultStr,
+                    };
+                    return updated;
+                  }
+                  return [
+                    ...prev,
+                    {
+                      id: `live_${event.data.toolCallId}`,
+                      session_id: sessionId,
+                      role: 'tool',
+                      content: resultStr,
+                      tool_call_id: event.data.toolCallId,
+                      tool_name: event.data.toolName || 'tool',
+                      tool_arguments: JSON.stringify(event.data.arguments || {}),
+                      tool_result: resultStr,
+                      status: event.data.status || 'COMPLETED',
+                      created_at: Date.now(),
+                    },
+                  ];
+                });
+              }
+            } else if (event.type === 'assistant_message_committed') {
+              if (event.data?.content || event.data?.reasoning_content) {
+                const committedMsg: MessageRecord = {
+                  id: event.data.id || `msg_${Date.now()}_assistant`,
+                  session_id: sessionId,
+                  role: 'assistant',
+                  content: event.data.content,
+                  reasoning_content: event.data.reasoning_content || null,
+                  created_at: Date.now(),
+                };
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === committedMsg.id)) return prev;
+                  return [...prev, committedMsg];
+                });
+              }
+              setStreamingContent('');
+              setStreamingReasoning('');
+            } else if (event.type === 'permission_required') {
+              setPendingPermission(event.data);
+              setIsStreaming(false);
+              isStreamingRef.current = false;
+              refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+            } else if (event.type === 'question_required') {
+              setPendingQuestion(event.data);
+              setIsStreaming(false);
+              isStreamingRef.current = false;
+              refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+              if (typeof window !== 'undefined' && localStorage.getItem('aidev_sound_notifications') !== 'false') {
+                playNotificationChime();
+              }
+            } else if (event.type === 'file_changed') {
+              refreshSessionData({ skipMessages: true, targetSessionId: sessionId });
+              if (event.data?.path) {
+                refreshSingleOpenTab(event.data.path);
+              }
+            } else if (event.type === 'done' || event.type === 'error') {
+              setIsStreaming(false);
+              isStreamingRef.current = false;
+              setPendingPermission(null);
+              setPendingQuestion(null);
+              refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+              if (event.type === 'done' && typeof window !== 'undefined' && localStorage.getItem('aidev_sound_notifications') !== 'false') {
+                playNotificationChime();
+              }
+            }
+          }
+        } catch (parseErr) {
+          console.error('Error handling SSE session event:', parseErr);
+        }
+      };
+
+      eventSource.onerror = () => {
+        sseActive = false;
+        startFallbackPolling();
+      };
+    } catch {
+      startFallbackPolling();
+    }
+
+    // Auto-sync on window focus
+    const onWindowFocus = () => {
+      refreshSessionData({ forceMessages: true, targetSessionId: sessionId });
+      refreshAllSessions();
+    };
+    window.addEventListener('focus', onWindowFocus);
+
+    return () => {
+      window.removeEventListener('focus', onWindowFocus);
+      stopFallbackPolling();
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  }, [currentSession?.id, refreshSessionData, refreshAllSessions, refreshSingleOpenTab]);
 
   // 4. Hydrate Workspace State (Tabs, Panel Open, Mode, Terminals, Width) on Session Change or Reload
   useEffect(() => {
@@ -1934,6 +2181,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
 
     const currentStreamId = ++activeStreamIdRef.current;
     isStreamingRef.current = true;
+    isLocalStreamingRef.current = true;
     setIsStreaming(true);
     setStreamingReasoning('');
     setStreamingContent('');
@@ -2000,6 +2248,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
           } catch {}
         }
         isStreamingRef.current = false;
+        isLocalStreamingRef.current = false;
         setIsStreaming(false);
         setStreamingContent('');
         setStreamingReasoning('');
@@ -2294,6 +2543,7 @@ export const DesktopAgentApp: React.FC<DesktopAgentAppProps> = ({
       if (activeStreamIdRef.current === currentStreamId) {
         lastStreamDoneAtRef.current = Date.now();
         isStreamingRef.current = false;
+        isLocalStreamingRef.current = false;
         setIsStreaming(false);
         setStreamingContent('');
         setStreamingReasoning('');

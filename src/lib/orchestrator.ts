@@ -24,6 +24,7 @@ import {
   getModelContextWindow,
   COMPACTION_CONSTANTS,
 } from './compaction';
+import { sessionEventBus } from './session-bus';
 
 export interface ParsedInlineToolCall {
   id: string;
@@ -106,6 +107,7 @@ export function parseInlineToolCalls(content: string): {
 
 export interface AgentEvent {
   type:
+    | 'turn_start'
     | 'reasoning_delta'
     | 'content_delta'
     | 'assistant_message_committed'
@@ -115,11 +117,15 @@ export interface AgentEvent {
     | 'question_required'
     | 'file_changed'
     | 'task_started'
+    | 'subagent_started'
+    | 'subagent_completed'
     | 'plan_created'
     | 'compaction_completed'
+    | 'sessions_updated'
     | 'done'
     | 'error';
-  data: any;
+  data?: any;
+  delta?: string;
 }
 
 export type EventCallback = (event: AgentEvent) => void;
@@ -151,7 +157,16 @@ export class AgentOrchestrator {
   constructor(sessionId: string, workdir: string, onEvent: EventCallback) {
     this.sessionId = sessionId;
     this.workdir = workdir;
-    this.onEvent = onEvent;
+    this.onEvent = (event: AgentEvent) => {
+      try {
+        sessionEventBus.broadcast(sessionId, event as any);
+      } catch (err) {
+        console.error('SessionEventBus broadcast error:', err);
+      }
+      if (onEvent) {
+        onEvent(event);
+      }
+    };
   }
 
   public abort(): void {
@@ -302,6 +317,18 @@ export class AgentOrchestrator {
         created_at: Date.now(),
       });
     }
+
+    // Broadcast turn_start so any open UI subscriber gets live user prompt immediately
+    this.onEvent({
+      type: 'turn_start',
+      data: {
+        sessionId: this.sessionId,
+        messageId: userMsgId,
+        prompt: storedContent,
+        isSeamlessContinue,
+        timestamp: Date.now(),
+      },
+    });
 
     try {
       await this.executeLoop(

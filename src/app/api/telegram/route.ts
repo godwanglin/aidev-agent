@@ -5,14 +5,18 @@ import { loadSettings, saveSettings } from '@/lib/storage';
 
 export async function GET() {
   try {
-    const status = telegramBotManager.getStatus();
     const settings = loadSettings();
+    if (settings.telegramBotEnabled && settings.telegramBotToken && !telegramBotManager.getStatus().isRunning) {
+      await telegramBotManager.start();
+    }
+    const status = telegramBotManager.getStatus();
     return NextResponse.json({
       ...status,
       enabled: Boolean(settings.telegramBotEnabled),
       tokenConfigured: Boolean(settings.telegramBotToken),
       allowedUserIds: settings.telegramAllowedUserIds || '',
       defaultProjectId: settings.telegramDefaultProjectId || '',
+      logs: telegramBotManager.getLogs(),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed fetching Telegram status' }, { status: 500 });
@@ -35,17 +39,22 @@ export async function POST(req: NextRequest) {
 
     if (action === 'start') {
       await telegramBotManager.start();
-      return NextResponse.json(telegramBotManager.getStatus());
+      return NextResponse.json({ ...telegramBotManager.getStatus(), logs: telegramBotManager.getLogs() });
     }
 
     if (action === 'stop') {
       await telegramBotManager.stop();
-      return NextResponse.json(telegramBotManager.getStatus());
+      return NextResponse.json({ ...telegramBotManager.getStatus(), logs: telegramBotManager.getLogs() });
     }
 
     if (action === 'restart') {
       await telegramBotManager.restart();
-      return NextResponse.json(telegramBotManager.getStatus());
+      return NextResponse.json({ ...telegramBotManager.getStatus(), logs: telegramBotManager.getLogs() });
+    }
+
+    if (action === 'clear_logs') {
+      telegramBotManager.clearLogs();
+      return NextResponse.json({ success: true, logs: [] });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

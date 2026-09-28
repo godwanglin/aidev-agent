@@ -596,6 +596,19 @@ async function startServer() {
       console.log('Launching Standalone Desktop Window...');
       launchDesktopApp(localUrl);
     }
+
+    // Auto-start Telegram Bot if enabled in settings
+    try {
+      const saved = getSavedSettings();
+      if (saved.telegramBotEnabled && saved.telegramBotToken) {
+        setTimeout(async () => {
+          try {
+            await fetch(`${localUrl}/api/telegram`);
+            console.log('   🤖 Telegram Bot:     Auto-started in background');
+          } catch {}
+        }, 1000);
+      }
+    } catch {}
   });
 }
 
