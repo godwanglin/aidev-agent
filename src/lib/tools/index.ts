@@ -506,7 +506,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
           },
           model: {
             type: 'string',
-            description: 'Generation model or style profile (e.g. "flux", "turbo", "flux-realism", "flux-anime", "flux-3d"). Default is "flux".',
+            description: 'Optional image generation model (e.g. "gpt-image-2.5"). If omitted, uses the configured model from Aidev Gateway settings.',
           },
           negative_prompt: {
             type: 'string',

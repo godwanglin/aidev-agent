@@ -90,11 +90,28 @@ export async function executeGenerateImage(
   let mimeType = 'image/png';
 
   // 1. First attempt: Call Gateway / OpenAI images endpoint (/v1/images/generations)
+  const settings = loadSettings();
+  const isAidev =
+    !settings.gatewayUrl ||
+    settings.gatewayUrl.includes('localhost:3000') ||
+    settings.gatewayUrl.includes('127.0.0.1:3000') ||
+    settings.gatewayUrl.includes('aidev') ||
+    settings.gatewayUrl.includes('weebinhub');
+
+  let requestedImageModel = params.model;
+  const isLegacyPollinationsKeyword =
+    !requestedImageModel ||
+    ['flux', 'turbo', 'default', 'flux-realism', 'flux-anime', 'flux-3d'].includes(requestedImageModel.toLowerCase());
+
+  if (isAidev && isLegacyPollinationsKeyword) {
+    requestedImageModel = settings.defaultImageModel || 'gpt-image-2.5';
+  } else if (!requestedImageModel) {
+    requestedImageModel = settings.defaultImageModel || 'gpt-image-2.5';
+  }
+
   try {
     const client = getOpenAIClient();
     const sizeStr = `${width}x${height}` as any;
-    const settings = loadSettings();
-    const requestedImageModel = params.model || settings.defaultImageModel || 'gpt-image-2.5';
     const response = await client.images.generate(
       {
         model: requestedImageModel,
@@ -103,14 +120,14 @@ export async function executeGenerateImage(
         size: sizeStr,
         response_format: 'b64_json',
       },
-      { timeout: 60000, maxRetries: 0 }
+      { timeout: 90000, maxRetries: 0 }
     );
 
     if (response?.data?.[0]?.b64_json) {
       imageBuffer = Buffer.from(response.data[0].b64_json, 'base64');
       mimeType = 'image/png';
     } else if (response?.data?.[0]?.url) {
-      const imgRes = await fetch(response.data[0].url, { signal: AbortSignal.timeout(15000) });
+      const imgRes = await fetch(response.data[0].url, { signal: AbortSignal.timeout(30000) });
       if (imgRes.ok) {
         const arrBuf = await imgRes.arrayBuffer();
         imageBuffer = Buffer.from(arrBuf);
@@ -118,6 +135,10 @@ export async function executeGenerateImage(
       }
     }
   } catch (gatewayErr: any) {
+    if (isAidev) {
+      const errMsg = gatewayErr?.message || gatewayErr?.error?.message || String(gatewayErr);
+      throw new Error(`[Aidev Gateway Image Generation Failed]: ${errMsg}`);
+    }
     console.warn(`[GenerateImage] Gateway endpoint attempt failed (${gatewayErr?.message || gatewayErr}), falling back to direct synthesis engine...`);
   }
 
