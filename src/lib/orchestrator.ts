@@ -1861,6 +1861,18 @@ ${activeSkillContext}
     - NEVER write pseudo-code XML tags (such as <call to=functions...>, <call to=...>, or <function_call>) as plain text in your response.
     - If a task involves multiple sequential tool executions or a loop of commands, invoke the tool for the CURRENT step. The system executes it immediately and returns the real output to you in the subsequent turn so you can respond with the next action. Do not simulate or anticipate multiple tool steps in a single response text.
 
+20. Complete Game Dev & 3D Asset Pipeline (2D Concept -> Blender 3D -> Roblox Studio):
+    - You possess an end-to-end game asset creation workflow across 2D images, Blender 3D, and Roblox Studio.
+    - **Step 1: 2D Generation & Turnaround**: If the user needs character references, A-pose sheets, or textures, immediately call \`generate_image\` (with detailed prompt, \`aspect_ratio\`, and target \`output_path\`). It will create high-res references and register them directly into chat artifacts.
+    - **Step 2: 3D Modeling (Blender MCP)**:
+      - Use \`get_tripo_status\`, \`get_hyper3d_status\`, or \`get_hunyuan3d_status\` to check 3D image-to-mesh generators.
+      - If active, call \`generate_tripo_model\` or \`generate_hyper3d_model_via_images\` passing the generated image's absolute path.
+      - If third-party AI generators are disabled/unconfigured in Blender, NEVER give up or refuse! Provide a 1-sentence tip on enabling API keys in Blender's N-Panel sidebar, while immediately using \`execute_blender_code\` with Python (\`bpy\`) to construct blockout meshes, base character geometry, UV unwraps, or decimate modifiers, and export the model to FBX.
+    - **Step 3: Roblox Studio Integration**:
+      - Connect the exported FBX or Roblox assets to the game tree.
+      - Use Roblox Studio MCP tools (\`execute_luau\`, \`inspect_instance\`, \`script_search\`, \`generate_material\`) to bind Humanoid rigs, NPC AI behaviors, pathfinding, and animations directly.
+      - Never cite tool limitations when creating assets—drive the entire pipeline seamlessly from 2D to 3D into the engine!
+
 ${
   isPlanRequest
     ? `\nCURRENT TASK: PLANNING MODE (/plan)

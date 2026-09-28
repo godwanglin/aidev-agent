@@ -12,6 +12,7 @@ import { executeWebSearch, WebSearchParams } from './web-search';
 import { executeReadUrl, ReadUrlParams } from './read-url';
 import { executeGetRepoMap, RepoMapParams, executeGetFileSymbols, FileSymbolsParams } from './repo-map';
 import { executeGetDiagnostics, DiagnosticsParams, executeFindReferences, FindReferencesParams } from './diagnostics';
+import { executeGenerateImage, GenerateImageParams } from './generate-image';
 import { loadSettings } from '../storage';
 import { matchPattern } from '../security';
 import { mcpClientManager } from '../mcp/client-manager';
@@ -474,6 +475,48 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_image',
+      description: 'Generate high-fidelity concept art, 2D model sheets, turnaround references, or game textures from text prompts. Automatically saves the image file to the workspace and registers it into session artifacts for instant chat preview.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Detailed prompt describing the image to generate (e.g. "Full body turnaround model sheet of a sci-fi cyber warrior in A-pose, front view, plain background").',
+          },
+          output_path: {
+            type: 'string',
+            description: 'Optional relative path to save the generated image in workspace (e.g. "assets/character_a_pose.png"). Defaults to "generated_images/image_<timestamp>.png".',
+          },
+          aspect_ratio: {
+            type: 'string',
+            enum: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+            description: 'Image aspect ratio (default "1:1").',
+          },
+          width: {
+            type: 'number',
+            description: 'Custom image width in pixels (e.g. 1024).',
+          },
+          height: {
+            type: 'number',
+            description: 'Custom image height in pixels (e.g. 1024).',
+          },
+          model: {
+            type: 'string',
+            description: 'Generation model or style profile (e.g. "flux", "turbo", "flux-realism", "flux-anime", "flux-3d"). Default is "flux".',
+          },
+          negative_prompt: {
+            type: 'string',
+            description: 'Optional elements or styles to avoid.',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
 ];
 
 // Read-only subset for researcher sub-agent
@@ -527,6 +570,9 @@ export function normalizeToolName(name: string): string {
   }
   if (['find_references', 'references', 'find_usages', 'usages'].includes(lower)) {
     return 'find_references';
+  }
+  if (['generate_image', 'create_image', 'image_generation', 'text_to_image', 'draw_image', 'gen_image'].includes(lower)) {
+    return 'generate_image';
   }
   return name;
 }
@@ -609,6 +655,8 @@ export async function dispatchToolCall(
       return await executeGrep(normalizedArgs as GrepParams, workdir);
     case 'run_command':
       return await executeRunCommand(normalizedArgs as RunCommandParams, workdir, sessionId);
+    case 'generate_image':
+      return await executeGenerateImage(normalizedArgs as GenerateImageParams, workdir, sessionId);
     case 'invoke_subagent':
       return await executeInvokeSubagent(
         normalizedArgs as InvokeSubagentParams,
